@@ -1,6 +1,6 @@
 # Terraform Provider for Cirro
 
-This Terraform provider allows you to manage [Cirro](https://cirro.bio) resources via infrastructure as code.
+Manage [Cirro](https://cirro.bio) resources via infrastructure as code.
 
 ## Requirements
 
@@ -26,7 +26,7 @@ provider "cirro" {
 
 ### Authentication
 
-The provider authenticates using OAuth2 client credentials. Set credentials via environment variables (recommended):
+The provider uses OAuth2 client credentials. Set credentials via environment variables (recommended):
 
 ```sh
 export CIRRO_BASE_URL="https://app.cirro.bio"
@@ -34,53 +34,212 @@ export CIRRO_CLIENT_ID="your-client-id"
 export CIRRO_CLIENT_SECRET="your-client-secret"
 ```
 
-Or configure inline (not recommended for secrets in production):
+The provider exchanges credentials for a Bearer token at `{base_url}/auth/token` and refreshes it automatically before expiry.
 
-```hcl
-provider "cirro" {
-  base_url      = "https://app.cirro.bio"
-  client_id     = "your-client-id"
-  client_secret = "your-client-secret"
-}
-```
-
-The provider automatically exchanges the client credentials for a Bearer token at
-`{base_url}/auth/token` and refreshes it before expiry.
+---
 
 ## Resources
 
-| Resource | Description |
-|---|---|
-| `cirro_project` | Create and manage projects |
-| `cirro_project_member` | Manage user roles within a project |
-| `cirro_user` | Invite and manage users |
+### `cirro_billing_account`
+
+Manages a billing account. Billing accounts are referenced by projects to track spend.
+
+**[→ Example](examples/resources/cirro_billing_account/resource.tf)**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Billing account name |
+| `customer_type` | string | yes | `INTERNAL`, `CONSORTIUM`, or `EXTERNAL` |
+| `billing_method` | string | yes | `BUDGET_NUMBER`, `PURCHASE_ORDER`, or `CREDIT` |
+| `primary_budget_number` | string | yes | Budget number or reference code |
+| `owner` | string | yes | Username of the account owner |
+| `shared_with` | list(string) | yes | Usernames the account is shared with |
+| `contacts` | list(object) | yes | At least one contact with `name`, `organization`, `email`, `phone` |
+
+---
+
+### `cirro_project`
+
+Manages a Cirro project. Projects are the top-level container for datasets, analyses, and team access.
+
+> **Note:** Cirro does not expose a project deletion API. Destroying this resource removes it from Terraform state but leaves the project in Cirro.
+
+**[→ Example](examples/resources/cirro_project/resource.tf)**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Project name (3–100 characters) |
+| `description` | string | yes | Project description |
+| `billing_account_id` | string | yes | ID of the billing account to charge |
+| `contacts` | list(object) | yes | 1–10 contacts with `name`, `organization`, `email`, `phone` |
+| `settings` | object | yes | See settings sub-arguments below |
+| `classification_ids` | list(string) | no | Governance classification IDs to attach |
+| `tags` | list(string) | no | Free-text labels shown in the Cirro UI |
+| `account` | object | no | Cloud account config (required for BYOA projects) |
+
+**`settings` sub-arguments**
+
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `budget_amount` | number | — | Spend limit for the period (must be > 0) |
+| `budget_period` | string | — | `MONTHLY`, `QUARTERLY`, or `ANNUALLY` |
+| `retention_policy_days` | number | `7` | Days before datasets expire |
+| `temporary_storage_lifetime_days` | number | `14` | Days before temporary storage is cleared |
+| `enable_backup` | bool | `false` | Enable automated S3 backup |
+| `enable_sftp` | bool | `false` | Enable SFTP access to project storage |
+| `service_connections` | list(string) | `[]` | Service connection IDs to attach |
+| `kms_arn` | string | — | Customer-managed KMS key ARN for encryption |
+| `vpc_id` | string | — | VPC ID for BYOA projects (format: `vpc-*`) |
+
+**`account` sub-arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `account_type` | string | yes | `HOSTED` or `BYOA` — **cannot be changed after creation** |
+| `account_id` | string | no | AWS account ID (12-digit) — **cannot be changed after creation** |
+| `account_name` | string | no | Human-readable account name |
+| `region_name` | string | no | AWS region (e.g. `us-east-1`) |
+
+---
+
+### `cirro_project_member`
+
+Manages a user's role within a project. Destroying this resource sets the user's role to `NONE`, removing their access.
+
+**[→ Example](examples/resources/cirro_project_member/resource.tf)**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `project_id` | string | yes | Project ID — forces replacement if changed |
+| `username` | string | yes | Cirro username — forces replacement if changed |
+| `role` | string | yes | `OWNER`, `ADMIN`, `CONTRIBUTOR`, or `COLLABORATOR` |
+| `suppress_notification` | bool | no | Suppress the email sent to the user (default: `false`) |
+
+Import: `terraform import cirro_project_member.example {project_id}/{username}`
+
+---
+
+### `cirro_user`
+
+Invites a user to Cirro and manages their profile.
+
+> **Note:** Cirro does not expose a user deletion API. Destroying this resource removes it from Terraform state but the user account remains in Cirro.
+
+**[→ Example](examples/resources/cirro_user/resource.tf)**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Full name (3–70 characters) |
+| `email` | string | yes | Email address — forces replacement if changed |
+| `organization` | string | yes | Organization name (2–40 characters) |
+| `phone` | string | no | Phone number |
+| `department` | string | no | Department |
+| `job_title` | string | no | Job title |
+| `global_roles` | list(string) | no | System-wide roles (admin-only) |
+
+The `username` attribute is computed — it is assigned by Cirro after the invitation is accepted.
+
+Import: `terraform import cirro_user.example {username}`
+
+---
+
+### `cirro_agent`
+
+Registers a Cirro compute agent. The agent software must be installed separately on your compute infrastructure; it will populate the registration fields (`status`, `registration_hostname`, etc.) once it checks in.
+
+**[→ Example](examples/resources/cirro_agent/resource.tf)**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Display name for the agent |
+| `agent_role_arn` | string | yes | ARN of the AWS IAM role the agent assumes |
+| `tags` | map(string) | no | Key-value labels shown to users selecting this agent |
+| `environment_configuration` | map(string) | no | Environment variables passed to the agent |
+
+Computed attributes: `status`, `registration_hostname`, `registration_os`, `registration_agent_version`, `created_by`, `created_at`, `updated_at`.
+
+Import: `terraform import cirro_agent.example {agent_id}`
+
+---
+
+### `cirro_classification`
+
+Manages a data governance classification. Classifications are applied to projects to signal and enforce compliance requirements.
+
+**[→ Example](examples/resources/cirro_classification/resource.tf)**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Classification name (max 100 characters) |
+| `description` | string | yes | What this classification means |
+| `requirement_ids` | list(string) | no | IDs of governance requirements to attach |
+
+Computed attributes: `created_by`, `created_at`, `updated_at`.
+
+Import: `terraform import cirro_classification.example {classification_id}`
+
+---
 
 ## Data Sources
 
-| Data Source | Description |
-|---|---|
-| `data.cirro_project` | Look up a project by ID |
-| `data.cirro_user` | Look up a user by username |
+### `data.cirro_project`
 
-## Building from Source
+Looks up a project by ID.
 
-```sh
-git clone https://github.com/cirro-bio/terraform-provider-cirro
-cd terraform-provider-cirro
-go mod tidy
-make install
+```hcl
+data "cirro_project" "example" {
+  id = "your-project-id"
+}
+
+output "project_name" {
+  value = data.cirro_project.example.name
+}
 ```
 
-## Developing
+### `data.cirro_user`
 
-### Running Tests
+Looks up a user by username.
+
+```hcl
+data "cirro_user" "example" {
+  username = "jsmith"
+}
+```
+
+---
+
+## Local Development
+
+### Build and install
+
+```sh
+go mod tidy
+go install .
+```
+
+### Configure Terraform to use the local binary
+
+Add a dev override to `~/.terraformrc` (Linux/Mac) or `%APPDATA%\terraform.rc` (Windows):
+
+```hcl
+provider_installation {
+  dev_overrides {
+    "cirro-bio/cirro" = "/path/to/go/bin"
+  }
+  direct {}
+}
+```
+
+With the override active, skip `terraform init` and run `terraform plan` / `terraform apply` directly.
+
+### Running tests
 
 ```sh
 make test       # unit tests
 make testacc    # acceptance tests (requires CIRRO_BASE_URL, CIRRO_CLIENT_ID, CIRRO_CLIENT_SECRET)
 ```
 
-### Generating Docs
+### Generating docs
 
 ```sh
 make generate
