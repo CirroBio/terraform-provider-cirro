@@ -4,4 +4,5 @@ resource "cirro_user" "example" {
   organization = "Acme Corp"
   department   = "Bioinformatics"
   job_title    = "Senior Scientist"
+  global_roles = ["pipeline-developers"]
 }

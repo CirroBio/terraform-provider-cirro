@@ -5,11 +5,14 @@ import (
 	"fmt"
 
 	cirroclient "github.com/cirro-bio/terraform-provider-cirro/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -82,7 +85,12 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				Optional:    true,
 				Computed:    true,
 				ElementType: types.StringType,
-				Description: "Global roles assigned to the user (admin-only).",
+				Description: "Global roles assigned to the user. Allowed values: administrators, sys-admins, pipeline-developers, and app-developers.",
+				Validators: []validator.List{
+					listvalidator.ValueStringsAre(
+						stringvalidator.OneOf("administrators", "sys-admins", "pipeline-developers", "app-developers"),
+					),
+				},
 			},
 		},
 	}
@@ -123,8 +131,16 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	if !plan.Phone.IsNull() || !plan.Department.IsNull() || !plan.JobTitle.IsNull() {
-		_, err = r.client.UpdateUser(ctx, found.Username, buildUpdateRequest(plan))
+	var globalRoles []string
+	resp.Diagnostics.Append(plan.GlobalRoles.ElementsAs(ctx, &globalRoles, false)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !plan.Phone.IsNull() || !plan.Department.IsNull() || !plan.JobTitle.IsNull() || len(globalRoles) > 0 {
+		updateReq := buildUpdateRequest(plan)
+		updateReq.GlobalRoles = globalRoles
+		_, err = r.client.UpdateUser(ctx, found.Username, updateReq)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating user profile after invite", err.Error())
 			return
