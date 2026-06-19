@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 var _ resource.Resource = &ProjectResource{}
@@ -28,17 +29,17 @@ type ProjectResource struct {
 }
 
 type ProjectResourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
-	Description      types.String `tfsdk:"description"`
-	BillingAccountID types.String `tfsdk:"billing_account_id"`
-	Status           types.String `tfsdk:"status"`
-	Organization     types.String `tfsdk:"organization"`
-	ClassificationIDs types.List  `tfsdk:"classification_ids"`
-	Tags             types.List   `tfsdk:"tags"`
-	Contacts         types.List   `tfsdk:"contacts"`
-	Settings         types.Object `tfsdk:"settings"`
-	Account          types.Object `tfsdk:"account"`
+	ID                types.String `tfsdk:"id"`
+	Name              types.String `tfsdk:"name"`
+	Description       types.String `tfsdk:"description"`
+	BillingAccountID  types.String `tfsdk:"billing_account_id"`
+	Status            types.String `tfsdk:"status"`
+	Organization      types.String `tfsdk:"organization"`
+	ClassificationIDs types.List   `tfsdk:"classification_ids"`
+	Tags              types.List   `tfsdk:"tags"`
+	Contacts          types.List   `tfsdk:"contacts"`
+	Settings          types.Object `tfsdk:"settings"`
+	Account           types.Object `tfsdk:"account"`
 }
 
 type ProjectSettingsModel struct {
@@ -350,7 +351,7 @@ func planToProjectInput(ctx context.Context, plan ProjectResourceModel) (cirrocl
 
 	// settings
 	var sm ProjectSettingsModel
-	diags.Append(plan.Settings.As(ctx, &sm, types.ObjectAsOptions{})...)
+	diags.Append(plan.Settings.As(ctx, &sm, basetypes.ObjectAsOptions{})...)
 	input.Settings = cirroclient.ProjectSettings{
 		BudgetAmount:                 int(sm.BudgetAmount.ValueInt64()),
 		BudgetPeriod:                 sm.BudgetPeriod.ValueString(),
@@ -380,7 +381,7 @@ func planToProjectInput(ctx context.Context, plan ProjectResourceModel) (cirrocl
 	// account
 	if !plan.Account.IsNull() && !plan.Account.IsUnknown() {
 		var am CloudAccountModel
-		diags.Append(plan.Account.As(ctx, &am, types.ObjectAsOptions{})...)
+		diags.Append(plan.Account.As(ctx, &am, basetypes.ObjectAsOptions{})...)
 		input.Account = &cirroclient.CloudAccount{
 			AccountID:   am.AccountID.ValueString(),
 			AccountName: am.AccountName.ValueString(),

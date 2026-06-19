@@ -14,7 +14,7 @@ lint:
 
 .PHONY: generate
 generate:
-	cd tools && go generate ./...
+	go generate ./...
 
 .PHONY: fmt
 fmt:
