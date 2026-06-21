@@ -34,12 +34,17 @@ type ProjectResourceModel struct {
 	Description       types.String `tfsdk:"description"`
 	BillingAccountID  types.String `tfsdk:"billing_account_id"`
 	Status            types.String `tfsdk:"status"`
+	StatusMessage     types.String `tfsdk:"status_message"`
 	Organization      types.String `tfsdk:"organization"`
 	ClassificationIDs types.List   `tfsdk:"classification_ids"`
 	Tags              types.List   `tfsdk:"tags"`
 	Contacts          types.List   `tfsdk:"contacts"`
 	Settings          types.Object `tfsdk:"settings"`
 	Account           types.Object `tfsdk:"account"`
+	CreatedBy         types.String `tfsdk:"created_by"`
+	CreatedAt         types.String `tfsdk:"created_at"`
+	UpdatedAt         types.String `tfsdk:"updated_at"`
+	DeployedAt        types.String `tfsdk:"deployed_at"`
 }
 
 type ProjectSettingsModel struct {
@@ -52,6 +57,26 @@ type ProjectSettingsModel struct {
 	ServiceConnections           types.List   `tfsdk:"service_connections"`
 	KmsArn                       types.String `tfsdk:"kms_arn"`
 	VpcID                        types.String `tfsdk:"vpc_id"`
+	BatchSubnets                 types.List   `tfsdk:"batch_subnets"`
+	WorkspaceSubnets             types.List   `tfsdk:"workspace_subnets"`
+	MaxSpotVCPU                  types.Int64  `tfsdk:"max_spot_vcpu"`
+	MaxFPGAVCPU                  types.Int64  `tfsdk:"max_fpga_vcpu"`
+	MaxGPUVCPU                   types.Int64  `tfsdk:"max_gpu_vcpu"`
+	EnableDragen                 types.Bool   `tfsdk:"enable_dragen"`
+	DragenAmi                    types.String `tfsdk:"dragen_ami"`
+	MaxWorkspacesVCPU            types.Int64  `tfsdk:"max_workspaces_vcpu"`
+	MaxWorkspacesGPUVCPU         types.Int64  `tfsdk:"max_workspaces_gpu_vcpu"`
+	MaxWorkspacesPerUser         types.Int64  `tfsdk:"max_workspaces_per_user"`
+	EnableAdvancedGpuConfig      types.Bool   `tfsdk:"enable_advanced_gpu_config"`
+	EnableCustomWorkspaceRoles   types.Bool   `tfsdk:"enable_custom_workspace_roles"`
+	MaxSharedFilesystems         types.Int64  `tfsdk:"max_shared_filesystems"`
+	IsDiscoverable               types.Bool   `tfsdk:"is_discoverable"`
+	IsShareable                  types.Bool   `tfsdk:"is_shareable"`
+	IsAiEnabled                  types.Bool   `tfsdk:"is_ai_enabled"`
+	// Computed — populated from API response.
+	HasPipelinesEnabled         types.Bool `tfsdk:"has_pipelines_enabled"`
+	HasWorkspacesEnabled        types.Bool `tfsdk:"has_workspaces_enabled"`
+	HasSharedFilesystemsEnabled types.Bool `tfsdk:"has_shared_filesystems_enabled"`
 }
 
 type ContactModel struct {
@@ -78,6 +103,25 @@ var settingsAttrTypes = map[string]attr.Type{
 	"service_connections":             types.ListType{ElemType: types.StringType},
 	"kms_arn":                         types.StringType,
 	"vpc_id":                          types.StringType,
+	"batch_subnets":                   types.ListType{ElemType: types.StringType},
+	"workspace_subnets":               types.ListType{ElemType: types.StringType},
+	"max_spot_vcpu":                   types.Int64Type,
+	"max_fpga_vcpu":                   types.Int64Type,
+	"max_gpu_vcpu":                    types.Int64Type,
+	"enable_dragen":                   types.BoolType,
+	"dragen_ami":                      types.StringType,
+	"max_workspaces_vcpu":             types.Int64Type,
+	"max_workspaces_gpu_vcpu":         types.Int64Type,
+	"max_workspaces_per_user":         types.Int64Type,
+	"enable_advanced_gpu_config":      types.BoolType,
+	"enable_custom_workspace_roles":   types.BoolType,
+	"max_shared_filesystems":          types.Int64Type,
+	"is_discoverable":                 types.BoolType,
+	"is_shareable":                    types.BoolType,
+	"is_ai_enabled":                   types.BoolType,
+	"has_pipelines_enabled":           types.BoolType,
+	"has_workspaces_enabled":          types.BoolType,
+	"has_shared_filesystems_enabled":  types.BoolType,
 }
 
 var contactAttrTypes = map[string]attr.Type{
@@ -125,19 +169,37 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Computed:    true,
 				Description: "Project status.",
 			},
+			"status_message": schema.StringAttribute{
+				Computed:    true,
+				Description: "Additional status detail.",
+			},
 			"organization": schema.StringAttribute{
 				Computed:    true,
 				Description: "Organization the project belongs to.",
 			},
+			"created_by": schema.StringAttribute{
+				Computed:    true,
+				Description: "User who created the project.",
+			},
+			"created_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Timestamp the project was created (ISO 8601).",
+			},
+			"updated_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Timestamp the project was last updated (ISO 8601).",
+			},
+			"deployed_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "Timestamp the project was last deployed (ISO 8601).",
+			},
 			"classification_ids": schema.ListAttribute{
 				Optional:    true,
-				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Data classification identifiers.",
 			},
 			"tags": schema.ListAttribute{
 				Optional:    true,
-				Computed:    true,
 				ElementType: types.StringType,
 				Description: "Project tags.",
 			},
@@ -202,6 +264,84 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 					"vpc_id": schema.StringAttribute{
 						Optional:    true,
 						Description: "VPC identifier (format: vpc-*).",
+					},
+					"batch_subnets": schema.ListAttribute{
+						Optional:    true,
+						ElementType: types.StringType,
+						Description: "Subnet IDs used for batch compute (BYOA projects).",
+					},
+					"workspace_subnets": schema.ListAttribute{
+						Optional:    true,
+						ElementType: types.StringType,
+						Description: "Subnet IDs used for workspaces (BYOA projects).",
+					},
+					"max_spot_vcpu": schema.Int64Attribute{
+						Optional:    true,
+						Description: "Maximum spot vCPU quota.",
+					},
+					"max_fpga_vcpu": schema.Int64Attribute{
+						Optional:    true,
+						Description: "Maximum FPGA vCPU quota.",
+					},
+					"max_gpu_vcpu": schema.Int64Attribute{
+						Optional:    true,
+						Description: "Maximum GPU vCPU quota.",
+					},
+					"enable_dragen": schema.BoolAttribute{
+						Optional:    true,
+						Description: "Whether DRAGEN acceleration is enabled.",
+					},
+					"dragen_ami": schema.StringAttribute{
+						Optional:    true,
+						Description: "AMI used for DRAGEN instances.",
+					},
+					"max_workspaces_vcpu": schema.Int64Attribute{
+						Optional:    true,
+						Description: "Maximum vCPU quota for workspaces.",
+					},
+					"max_workspaces_gpu_vcpu": schema.Int64Attribute{
+						Optional:    true,
+						Description: "Maximum GPU vCPU quota for workspaces.",
+					},
+					"max_workspaces_per_user": schema.Int64Attribute{
+						Optional:    true,
+						Description: "Maximum concurrent workspaces per user.",
+					},
+					"enable_advanced_gpu_config": schema.BoolAttribute{
+						Optional:    true,
+						Description: "Whether advanced GPU configuration is enabled.",
+					},
+					"enable_custom_workspace_roles": schema.BoolAttribute{
+						Optional:    true,
+						Description: "Whether custom workspace roles are enabled.",
+					},
+					"max_shared_filesystems": schema.Int64Attribute{
+						Optional:    true,
+						Description: "Maximum number of shared filesystems.",
+					},
+					"is_discoverable": schema.BoolAttribute{
+						Optional:    true,
+						Description: "Whether the project is discoverable by other users.",
+					},
+					"is_shareable": schema.BoolAttribute{
+						Optional:    true,
+						Description: "Whether datasets in the project can be shared.",
+					},
+					"is_ai_enabled": schema.BoolAttribute{
+						Optional:    true,
+						Description: "Whether AI features are enabled.",
+					},
+					"has_pipelines_enabled": schema.BoolAttribute{
+						Computed:    true,
+						Description: "Whether pipeline execution is enabled.",
+					},
+					"has_workspaces_enabled": schema.BoolAttribute{
+						Computed:    true,
+						Description: "Whether interactive workspaces are enabled.",
+					},
+					"has_shared_filesystems_enabled": schema.BoolAttribute{
+						Computed:    true,
+						Description: "Whether shared filesystems are enabled.",
 					},
 				},
 			},
@@ -352,6 +492,10 @@ func planToProjectInput(ctx context.Context, plan ProjectResourceModel) (cirrocl
 	// settings
 	var sm ProjectSettingsModel
 	diags.Append(plan.Settings.As(ctx, &sm, basetypes.ObjectAsOptions{})...)
+	var svcConns, batchSubnets, workspaceSubnets []string
+	diags.Append(sm.ServiceConnections.ElementsAs(ctx, &svcConns, false)...)
+	diags.Append(sm.BatchSubnets.ElementsAs(ctx, &batchSubnets, false)...)
+	diags.Append(sm.WorkspaceSubnets.ElementsAs(ctx, &workspaceSubnets, false)...)
 	input.Settings = cirroclient.ProjectSettings{
 		BudgetAmount:                 int(sm.BudgetAmount.ValueInt64()),
 		BudgetPeriod:                 sm.BudgetPeriod.ValueString(),
@@ -361,10 +505,24 @@ func planToProjectInput(ctx context.Context, plan ProjectResourceModel) (cirrocl
 		TemporaryStorageLifetimeDays: int(sm.TemporaryStorageLifetimeDays.ValueInt64()),
 		KmsArn:                       sm.KmsArn.ValueString(),
 		VpcID:                        sm.VpcID.ValueString(),
+		ServiceConnections:           svcConns,
+		BatchSubnets:                 batchSubnets,
+		WorkspaceSubnets:             workspaceSubnets,
+		MaxSpotVCPU:                  int(sm.MaxSpotVCPU.ValueInt64()),
+		MaxFPGAVCPU:                  int(sm.MaxFPGAVCPU.ValueInt64()),
+		MaxGPUVCPU:                   int(sm.MaxGPUVCPU.ValueInt64()),
+		EnableDragen:                 sm.EnableDragen.ValueBool(),
+		DragenAmi:                    sm.DragenAmi.ValueString(),
+		MaxWorkspacesVCPU:            int(sm.MaxWorkspacesVCPU.ValueInt64()),
+		MaxWorkspacesGPUVCPU:         int(sm.MaxWorkspacesGPUVCPU.ValueInt64()),
+		MaxWorkspacesPerUser:         int(sm.MaxWorkspacesPerUser.ValueInt64()),
+		EnableAdvancedGpuConfig:      sm.EnableAdvancedGpuConfig.ValueBool(),
+		EnableCustomWorkspaceRoles:   sm.EnableCustomWorkspaceRoles.ValueBool(),
+		MaxSharedFilesystems:         int(sm.MaxSharedFilesystems.ValueInt64()),
+		IsDiscoverable:               sm.IsDiscoverable.ValueBool(),
+		IsShareable:                  sm.IsShareable.ValueBool(),
+		IsAiEnabled:                  sm.IsAiEnabled.ValueBool(),
 	}
-	var svcConns []string
-	diags.Append(sm.ServiceConnections.ElementsAs(ctx, &svcConns, false)...)
-	input.Settings.ServiceConnections = svcConns
 
 	// classification IDs
 	var classIDs []string
@@ -401,7 +559,12 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 	m.Description = types.StringValue(p.Description)
 	m.BillingAccountID = types.StringValue(p.BillingAccountID)
 	m.Status = types.StringValue(p.Status)
+	m.StatusMessage = types.StringValue(p.StatusMessage)
 	m.Organization = types.StringValue(p.Organization)
+	m.CreatedBy = types.StringValue(p.CreatedBy)
+	m.CreatedAt = types.StringValue(p.CreatedAt)
+	m.UpdatedAt = types.StringValue(p.UpdatedAt)
+	m.DeployedAt = types.StringValue(p.DeployedAt)
 
 	classIDs, d := types.ListValueFrom(ctx, types.StringType, p.ClassificationIDs)
 	diags.Append(d...)
@@ -434,6 +597,10 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 	// settings
 	svcConns, d := types.ListValueFrom(ctx, types.StringType, p.Settings.ServiceConnections)
 	diags.Append(d...)
+	batchSubnets, d := types.ListValueFrom(ctx, types.StringType, p.Settings.BatchSubnets)
+	diags.Append(d...)
+	workspaceSubnets, d := types.ListValueFrom(ctx, types.StringType, p.Settings.WorkspaceSubnets)
+	diags.Append(d...)
 	settings, d := types.ObjectValue(settingsAttrTypes, map[string]attr.Value{
 		"budget_amount":                   types.Int64Value(int64(p.Settings.BudgetAmount)),
 		"budget_period":                   types.StringValue(p.Settings.BudgetPeriod),
@@ -444,6 +611,25 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 		"service_connections":             svcConns,
 		"kms_arn":                         types.StringValue(p.Settings.KmsArn),
 		"vpc_id":                          types.StringValue(p.Settings.VpcID),
+		"batch_subnets":                   nullableList(ctx, batchSubnets, p.Settings.BatchSubnets),
+		"workspace_subnets":               nullableList(ctx, workspaceSubnets, p.Settings.WorkspaceSubnets),
+		"max_spot_vcpu":                   nullableInt64(p.Settings.MaxSpotVCPU),
+		"max_fpga_vcpu":                   nullableInt64(p.Settings.MaxFPGAVCPU),
+		"max_gpu_vcpu":                    nullableInt64(p.Settings.MaxGPUVCPU),
+		"enable_dragen":                   nullableBool(p.Settings.EnableDragen),
+		"dragen_ami":                      nullableString(p.Settings.DragenAmi),
+		"max_workspaces_vcpu":             nullableInt64(p.Settings.MaxWorkspacesVCPU),
+		"max_workspaces_gpu_vcpu":         nullableInt64(p.Settings.MaxWorkspacesGPUVCPU),
+		"max_workspaces_per_user":         nullableInt64(p.Settings.MaxWorkspacesPerUser),
+		"enable_advanced_gpu_config":      nullableBool(p.Settings.EnableAdvancedGpuConfig),
+		"enable_custom_workspace_roles":   nullableBool(p.Settings.EnableCustomWorkspaceRoles),
+		"max_shared_filesystems":          nullableInt64(p.Settings.MaxSharedFilesystems),
+		"is_discoverable":                 nullableBool(p.Settings.IsDiscoverable),
+		"is_shareable":                    nullableBool(p.Settings.IsShareable),
+		"is_ai_enabled":                   nullableBool(p.Settings.IsAiEnabled),
+		"has_pipelines_enabled":           types.BoolValue(p.Settings.HasPipelinesEnabled),
+		"has_workspaces_enabled":          types.BoolValue(p.Settings.HasWorkspacesEnabled),
+		"has_shared_filesystems_enabled":  types.BoolValue(p.Settings.HasSharedFilesystemsEnabled),
 	})
 	diags.Append(d...)
 	m.Settings = settings
@@ -463,4 +649,34 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 	}
 
 	return diags
+}
+
+// nullableInt64 returns null when v is zero so Optional-only attributes stay
+// null in state when the API does not set them.
+func nullableInt64(v int) attr.Value {
+	if v == 0 {
+		return types.Int64Null()
+	}
+	return types.Int64Value(int64(v))
+}
+
+func nullableBool(v bool) attr.Value {
+	if !v {
+		return types.BoolNull()
+	}
+	return types.BoolValue(v)
+}
+
+func nullableString(v string) attr.Value {
+	if v == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(v)
+}
+
+func nullableList(_ context.Context, list types.List, raw []string) attr.Value {
+	if len(raw) == 0 {
+		return types.ListNull(types.StringType)
+	}
+	return list
 }

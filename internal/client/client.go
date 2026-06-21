@@ -13,9 +13,9 @@ import (
 type TokenGetter func(ctx context.Context) (string, error)
 
 type Client struct {
-	baseURL     string
-	getToken    TokenGetter
-	httpClient  *http.Client
+	baseURL    string
+	getToken   TokenGetter
+	httpClient *http.Client
 }
 
 func New(baseURL string, getToken TokenGetter) *Client {
@@ -85,4 +85,8 @@ func (c *Client) post(ctx context.Context, path string, body, out any) error {
 
 func (c *Client) put(ctx context.Context, path string, body, out any) error {
 	return c.do(ctx, http.MethodPut, path, body, out)
+}
+
+func (c *Client) delete(ctx context.Context, path string) error {
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
 }

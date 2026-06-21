@@ -3,32 +3,33 @@ package client
 // ---- Projects ----
 
 type Project struct {
-	ID               string   `json:"id"`
-	Name             string   `json:"name"`
-	Description      string   `json:"description"`
-	Status           string   `json:"status"`
-	Organization     string   `json:"organization"`
-	BillingAccountID string   `json:"billingAccountId"`
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	Description       string   `json:"description"`
+	Status            string   `json:"status"`
+	Organization      string   `json:"organization"`
+	BillingAccountID  string   `json:"billingAccountId"`
 	ClassificationIDs []string `json:"classificationIds"`
-	Tags             []Tag    `json:"tags"`
+	Tags              []Tag    `json:"tags"`
 }
 
 type ProjectDetail struct {
-	ID               string          `json:"id"`
-	Name             string          `json:"name"`
-	Description      string          `json:"description"`
-	Status           string          `json:"status"`
-	Organization     string          `json:"organization"`
-	BillingAccountID string          `json:"billingAccountId"`
-	ClassificationIDs []string       `json:"classificationIds"`
-	Tags             []Tag           `json:"tags"`
-	Contacts         []Contact       `json:"contacts"`
-	Settings         ProjectSettings `json:"settings"`
-	Account          *CloudAccount   `json:"account,omitempty"`
-	StatusMessage    string          `json:"statusMessage"`
-	CreatedBy        string          `json:"createdBy"`
-	CreatedAt        string          `json:"createdAt"`
-	UpdatedAt        string          `json:"updatedAt"`
+	ID                string          `json:"id"`
+	Name              string          `json:"name"`
+	Description       string          `json:"description"`
+	Status            string          `json:"status"`
+	Organization      string          `json:"organization"`
+	BillingAccountID  string          `json:"billingAccountId"`
+	ClassificationIDs []string        `json:"classificationIds"`
+	Tags              []Tag           `json:"tags"`
+	Contacts          []Contact       `json:"contacts"`
+	Settings          ProjectSettings `json:"settings"`
+	Account           *CloudAccount   `json:"account,omitempty"`
+	StatusMessage     string          `json:"statusMessage"`
+	CreatedBy         string          `json:"createdBy"`
+	CreatedAt         string          `json:"createdAt"`
+	UpdatedAt         string          `json:"updatedAt"`
+	DeployedAt        string          `json:"deployedAt"`
 }
 
 type ProjectInput struct {
@@ -43,15 +44,36 @@ type ProjectInput struct {
 }
 
 type ProjectSettings struct {
-	BudgetAmount                  int    `json:"budgetAmount"`
-	BudgetPeriod                  string `json:"budgetPeriod"`
-	EnableBackup                  bool   `json:"enableBackup"`
-	EnableSftp                    bool   `json:"enableSftp"`
-	RetentionPolicyDays           int    `json:"retentionPolicyDays"`
-	TemporaryStorageLifetimeDays  int    `json:"temporaryStorageLifetimeDays"`
-	ServiceConnections            []string `json:"serviceConnections,omitempty"`
-	KmsArn                        string `json:"kmsArn,omitempty"`
-	VpcID                         string `json:"vpcId,omitempty"`
+	BudgetAmount                 int      `json:"budgetAmount"`
+	BudgetPeriod                 string   `json:"budgetPeriod"`
+	EnableBackup                 bool     `json:"enableBackup"`
+	EnableSftp                   bool     `json:"enableSftp"`
+	RetentionPolicyDays          int      `json:"retentionPolicyDays"`
+	TemporaryStorageLifetimeDays int      `json:"temporaryStorageLifetimeDays"`
+	ServiceConnections           []string `json:"serviceConnections,omitempty"`
+	KmsArn                       string   `json:"kmsArn,omitempty"`
+	VpcID                        string   `json:"vpcId,omitempty"`
+	BatchSubnets                 []string `json:"batchSubnets,omitempty"`
+	WorkspaceSubnets             []string `json:"workspaceSubnets,omitempty"`
+	MaxSpotVCPU                  int      `json:"maxSpotVCPU,omitempty"`
+	MaxFPGAVCPU                  int      `json:"maxFPGAVCPU,omitempty"`
+	MaxGPUVCPU                   int      `json:"maxGPUVCPU,omitempty"`
+	EnableDragen                 bool     `json:"enableDragen,omitempty"`
+	DragenAmi                    string   `json:"dragenAmi,omitempty"`
+	MaxWorkspacesVCPU            int      `json:"maxWorkspacesVCPU,omitempty"`
+	MaxWorkspacesGPUVCPU         int      `json:"maxWorkspacesGPUVCPU,omitempty"`
+	MaxWorkspacesPerUser         int      `json:"maxWorkspacesPerUser,omitempty"`
+	EnableAdvancedGpuConfig      bool     `json:"enableAdvancedGpuConfig,omitempty"`
+	EnableCustomWorkspaceRoles   bool     `json:"enableCustomWorkspaceRoles,omitempty"`
+	MaxSharedFilesystems         int      `json:"maxSharedFilesystems,omitempty"`
+	IsDiscoverable               bool     `json:"isDiscoverable,omitempty"`
+	IsShareable                  bool     `json:"isShareable,omitempty"`
+	IsAiEnabled                  bool     `json:"isAiEnabled,omitempty"`
+
+	// Computed — set by Cirro, not sent in create/update requests.
+	HasPipelinesEnabled         bool `json:"hasPipelinesEnabled,omitempty"`
+	HasWorkspacesEnabled        bool `json:"hasWorkspacesEnabled,omitempty"`
+	HasSharedFilesystemsEnabled bool `json:"hasSharedFilesystemsEnabled,omitempty"`
 }
 
 type Contact struct {
@@ -98,16 +120,16 @@ type SetUserProjectRoleRequest struct {
 // ---- Users ----
 
 type UserDetail struct {
-	Username           string                 `json:"username"`
-	Name               string                 `json:"name"`
-	Email              string                 `json:"email"`
-	Organization       string                 `json:"organization"`
-	Phone              string                 `json:"phone"`
-	OrcidID            string                 `json:"orcidId"`
-	JobTitle           string                 `json:"jobTitle"`
-	Department         string                 `json:"department"`
-	InvitedBy          string                 `json:"invitedBy"`
-	GlobalRoles        []string               `json:"globalRoles"`
+	Username           string                  `json:"username"`
+	Name               string                  `json:"name"`
+	Email              string                  `json:"email"`
+	Organization       string                  `json:"organization"`
+	Phone              string                  `json:"phone"`
+	OrcidID            string                  `json:"orcidId"`
+	JobTitle           string                  `json:"jobTitle"`
+	Department         string                  `json:"department"`
+	InvitedBy          string                  `json:"invitedBy"`
+	GlobalRoles        []string                `json:"globalRoles"`
 	ProjectAssignments []UserProjectAssignment `json:"projectAssignments"`
 }
 
@@ -178,16 +200,16 @@ type BillingAccountRequest struct {
 // ---- Agents ----
 
 type AgentDetail struct {
-	ID                       string            `json:"id"`
-	Name                     string            `json:"name"`
-	AgentRoleArn             string            `json:"agentRoleArn"`
-	Status                   string            `json:"status"`
+	ID                       string             `json:"id"`
+	Name                     string             `json:"name"`
+	AgentRoleArn             string             `json:"agentRoleArn"`
+	Status                   string             `json:"status"`
 	Registration             *AgentRegistration `json:"registration,omitempty"`
-	Tags                     map[string]string `json:"tags,omitempty"`
-	EnvironmentConfiguration map[string]string `json:"environmentConfiguration,omitempty"`
-	CreatedBy                string            `json:"createdBy"`
-	CreatedAt                string            `json:"createdAt"`
-	UpdatedAt                string            `json:"updatedAt"`
+	Tags                     map[string]string  `json:"tags,omitempty"`
+	EnvironmentConfiguration map[string]string  `json:"environmentConfiguration,omitempty"`
+	CreatedBy                string             `json:"createdBy"`
+	CreatedAt                string             `json:"createdAt"`
+	UpdatedAt                string             `json:"updatedAt"`
 }
 
 type AgentInput struct {
@@ -221,4 +243,68 @@ type ClassificationInput struct {
 	Name           string   `json:"name"`
 	Description    string   `json:"description"`
 	RequirementIDs []string `json:"requirementIds"`
+}
+
+// ---- Pipelines (Processes) ----
+
+type PipelineCode struct {
+	RepositoryPath  string `json:"repositoryPath"`
+	Version         string `json:"version"`
+	RepositoryType  string `json:"repositoryType"`
+	EntryPoint      string `json:"entryPoint"`
+	ExecutorVersion string `json:"executorVersion,omitempty"`
+}
+
+type CustomPipelineSettings struct {
+	Repository     string `json:"repository"`
+	Branch         string `json:"branch,omitempty"`
+	Folder         string `json:"folder,omitempty"`
+	RepositoryType string `json:"repositoryType,omitempty"`
+	LastSync       string `json:"lastSync,omitempty"`
+	SyncStatus     string `json:"syncStatus,omitempty"`
+	CommitHash     string `json:"commitHash,omitempty"`
+	IsAuthorized   bool   `json:"isAuthorized,omitempty"`
+}
+
+type ProcessInput struct {
+	ID                   string                  `json:"id"`
+	Name                 string                  `json:"name"`
+	Description          string                  `json:"description"`
+	Executor             string                  `json:"executor"`
+	ChildProcessIDs      []string                `json:"childProcessIds"`
+	ParentProcessIDs     []string                `json:"parentProcessIds"`
+	LinkedProjectIDs     []string                `json:"linkedProjectIds"`
+	DataType             string                  `json:"dataType,omitempty"`
+	Category             string                  `json:"category,omitempty"`
+	DocumentationURL     string                  `json:"documentationUrl,omitempty"`
+	FileRequirementsMsg  string                  `json:"fileRequirementsMessage,omitempty"`
+	IsTenantWide         bool                    `json:"isTenantWide,omitempty"`
+	AllowMultipleSources bool                    `json:"allowMultipleSources,omitempty"`
+	UsesSampleSheet      bool                    `json:"usesSampleSheet,omitempty"`
+	PipelineCode         *PipelineCode           `json:"pipelineCode,omitempty"`
+	CustomSettings       *CustomPipelineSettings `json:"customSettings,omitempty"`
+}
+
+type ProcessDetail struct {
+	ID                   string                  `json:"id"`
+	Name                 string                  `json:"name"`
+	Description          string                  `json:"description"`
+	Executor             string                  `json:"executor"`
+	DataType             string                  `json:"dataType"`
+	Category             string                  `json:"category"`
+	PipelineType         string                  `json:"pipelineType"`
+	DocumentationURL     string                  `json:"documentationUrl"`
+	FileRequirementsMsg  string                  `json:"fileRequirementsMessage"`
+	ChildProcessIDs      []string                `json:"childProcessIds"`
+	ParentProcessIDs     []string                `json:"parentProcessIds"`
+	LinkedProjectIDs     []string                `json:"linkedProjectIds"`
+	Owner                string                  `json:"owner"`
+	IsTenantWide         bool                    `json:"isTenantWide"`
+	AllowMultipleSources bool                    `json:"allowMultipleSources"`
+	UsesSampleSheet      bool                    `json:"usesSampleSheet"`
+	IsArchived           bool                    `json:"isArchived"`
+	PipelineCode         *PipelineCode           `json:"pipelineCode"`
+	CustomSettings       *CustomPipelineSettings `json:"customSettings"`
+	CreatedAt            string                  `json:"createdAt"`
+	UpdatedAt            string                  `json:"updatedAt"`
 }

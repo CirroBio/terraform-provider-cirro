@@ -73,9 +73,11 @@ Manages a Cirro project. Projects are the top-level container for datasets, anal
 | `billing_account_id` | string | yes | ID of the billing account to charge |
 | `contacts` | list(object) | yes | 1–10 contacts with `name`, `organization`, `email`, `phone` |
 | `settings` | object | yes | See settings sub-arguments below |
+| `account` | object | no | Cloud account config (required for BYOA projects) |
 | `classification_ids` | list(string) | no | Governance classification IDs to attach |
 | `tags` | list(string) | no | Free-text labels shown in the Cirro UI |
-| `account` | object | no | Cloud account config (required for BYOA projects) |
+
+Computed attributes: `id`, `status`, `status_message`, `organization`, `created_by`, `created_at`, `updated_at`, `deployed_at`.
 
 **`settings` sub-arguments**
 
@@ -87,9 +89,27 @@ Manages a Cirro project. Projects are the top-level container for datasets, anal
 | `temporary_storage_lifetime_days` | number | `14` | Days before temporary storage is cleared |
 | `enable_backup` | bool | `false` | Enable automated S3 backup |
 | `enable_sftp` | bool | `false` | Enable SFTP access to project storage |
-| `service_connections` | list(string) | `[]` | Service connection IDs to attach |
+| `service_connections` | list(string) | — | Service connection IDs to attach |
 | `kms_arn` | string | — | Customer-managed KMS key ARN for encryption |
 | `vpc_id` | string | — | VPC ID for BYOA projects (format: `vpc-*`) |
+| `batch_subnets` | list(string) | — | Subnet IDs for batch compute (BYOA) |
+| `workspace_subnets` | list(string) | — | Subnet IDs for workspaces (BYOA) |
+| `max_spot_vcpu` | number | — | Maximum spot vCPU quota |
+| `max_fpga_vcpu` | number | — | Maximum FPGA vCPU quota |
+| `max_gpu_vcpu` | number | — | Maximum GPU vCPU quota |
+| `enable_dragen` | bool | — | Enable DRAGEN compute environment |
+| `dragen_ami` | string | — | AMI for DRAGEN instances |
+| `max_workspaces_vcpu` | number | — | Maximum vCPU quota for workspaces |
+| `max_workspaces_gpu_vcpu` | number | — | Maximum GPU vCPU quota for workspaces |
+| `max_workspaces_per_user` | number | — | Maximum concurrent workspaces per user |
+| `enable_advanced_gpu_config` | bool | — | Enable advanced GPU configuration |
+| `enable_custom_workspace_roles` | bool | — | Enable custom workspace roles |
+| `max_shared_filesystems` | number | — | Maximum number of shared filesystems |
+| `is_discoverable` | bool | — | Allow other users to discover the project |
+| `is_shareable` | bool | — | Allow datasets to be shared outside the project |
+| `is_ai_enabled` | bool | — | Enable AI features |
+
+Computed settings: `has_pipelines_enabled`, `has_workspaces_enabled`, `has_shared_filesystems_enabled`.
 
 **`account` sub-arguments**
 
@@ -99,6 +119,8 @@ Manages a Cirro project. Projects are the top-level container for datasets, anal
 | `account_id` | string | no | AWS account ID (12-digit) — **cannot be changed after creation** |
 | `account_name` | string | no | Human-readable account name |
 | `region_name` | string | no | AWS region (e.g. `us-east-1`) |
+
+Import: `terraform import cirro_project.example {project_id}`
 
 ---
 
@@ -135,7 +157,7 @@ Invites a user to Cirro and manages their profile.
 | `phone` | string | no | Phone number |
 | `department` | string | no | Department |
 | `job_title` | string | no | Job title |
-| `global_roles` | list(string) | no | System-wide roles (admin-only) |
+| `global_roles` | list(string) | no | System-wide roles. Allowed values: `administrators`, `sys-admins`, `pipeline-developers`, `app-developers` |
 
 The `username` attribute is computed — it is assigned by Cirro after the invitation is accepted.
 
@@ -210,12 +232,25 @@ data "cirro_user" "example" {
 
 ## Local Development
 
-### Build and install
+### Build the binary
 
 ```sh
-go mod tidy
+make build
+```
+
+This produces a `terraform-provider-cirro` binary in the current directory. To cross-compile for a specific platform:
+
+```sh
+GOOS=linux GOARCH=amd64 go build -o terraform-provider-cirro_linux_amd64 .
+```
+
+### Install into Go bin (alternative)
+
+```sh
 go install .
 ```
+
+Installs the binary to `$GOPATH/bin` (typically `~/go/bin`).
 
 ### Configure Terraform to use the local binary
 

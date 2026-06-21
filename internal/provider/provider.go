@@ -90,8 +90,8 @@ func (p *CirroProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	}
 
 	baseURL = strings.TrimRight(baseURL, "/")
-	tokenURL := fmt.Sprintf("%s/auth/token", baseURL)
 	apiURL := fmt.Sprintf("%s/api", baseURL)
+	tokenURL := fmt.Sprintf("%s/auth/token", apiURL)
 
 	creds := cirroauth.NewClientCredentials(clientID, clientSecret, tokenURL)
 	client := cirroclient.New(apiURL, creds.GetToken)
@@ -108,6 +108,7 @@ func (p *CirroProvider) Resources(_ context.Context) []func() resource.Resource 
 		NewBillingAccountResource,
 		NewAgentResource,
 		NewClassificationResource,
+		NewPipelineResource,
 	}
 }
 
