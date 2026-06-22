@@ -202,6 +202,58 @@ Import: `terraform import cirro_classification.example {classification_id}`
 
 ---
 
+### `cirro_process`
+
+Manages a custom Cirro process (pipeline or ingest data type). Processes define the workflow code and UI form that project members run to analyze data.
+
+> **Note:** Destroying this resource archives the process in Cirro (it is not deleted permanently).
+
+**[→ Example](examples/resources/cirro_process/resource.tf)**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | Unique process ID (4–80 chars, lowercase, numbers, dashes, underscores). **Cannot be changed after creation.** |
+| `name` | string | yes | Friendly display name (4–80 characters) |
+| `description` | string | yes | What the process does (4–500 characters) |
+| `executor` | string | yes | Execution engine: `INGEST`, `NEXTFLOW`, `CROMWELL`, or `OMICS_READY2RUN` |
+| `linked_project_ids` | list(string) | yes | IDs of projects that can run this process |
+| `parent_process_ids` | list(string) | yes | IDs of processes whose output feeds into this one (empty list if none) |
+| `child_process_ids` | list(string) | yes | IDs of processes that can run after this one (empty list if none) |
+| `pipeline_code` | object | no | Location of workflow code (required for NEXTFLOW/CROMWELL/OMICS_READY2RUN, not used for INGEST) |
+| `custom_settings` | object | no | Location of the Cirro process definition in a GitHub repo |
+| `data_type` | string | no | Name of the data type produced by this process |
+| `category` | string | no | UI category label (e.g. `Microbial Analysis`) |
+| `documentation_url` | string | no | Link to process documentation |
+| `file_requirements_message` | string | no | Instructions shown when uploading files (INGEST processes) |
+| `is_tenant_wide` | bool | no | Share across the entire tenant (default: `false`) |
+| `allow_multiple_sources` | bool | no | Accept multiple dataset sources (default: `false`) |
+| `uses_sample_sheet` | bool | no | Use the Cirro-provided sample sheet (default: `false`) |
+
+**`pipeline_code` sub-arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `repository_path` | string | yes | GitHub repository containing the workflow code (`org/repo`) |
+| `version` | string | yes | Branch, tag, or commit hash |
+| `repository_type` | string | yes | `NONE`, `AWS`, `GITHUB_PUBLIC`, or `GITHUB_PRIVATE` |
+| `entry_point` | string | yes | Main script to execute (e.g. `main.nf`) |
+| `executor_version` | string | no | Version of the executor runtime |
+
+**`custom_settings` sub-arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `repository` | string | yes | GitHub repository containing the process definition (`org/repo`) |
+| `branch` | string | no | Branch, tag, or commit hash (default: `main`) |
+| `folder` | string | no | Folder within the repo (default: `.cirro`) |
+| `repository_type` | string | no | `NONE`, `AWS`, `GITHUB_PUBLIC`, or `GITHUB_PRIVATE` |
+
+Computed attributes: `owner`, `is_archived`, `created_at`, `updated_at`, `custom_settings.last_sync`, `custom_settings.sync_status`, `custom_settings.commit_hash`.
+
+Import: `terraform import cirro_process.example {process_id}`
+
+---
+
 ## Data Sources
 
 ### `data.cirro_project`

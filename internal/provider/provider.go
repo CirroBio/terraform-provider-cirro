@@ -108,7 +108,7 @@ func (p *CirroProvider) Resources(_ context.Context) []func() resource.Resource 
 		NewBillingAccountResource,
 		NewAgentResource,
 		NewClassificationResource,
-		NewPipelineResource,
+		NewProcessResource,
 	}
 }
 

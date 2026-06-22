@@ -19,18 +19,18 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
-var _ resource.Resource = &PipelineResource{}
-var _ resource.ResourceWithImportState = &PipelineResource{}
+var _ resource.Resource = &ProcessResource{}
+var _ resource.ResourceWithImportState = &ProcessResource{}
 
-func NewPipelineResource() resource.Resource {
-	return &PipelineResource{}
+func NewProcessResource() resource.Resource {
+	return &ProcessResource{}
 }
 
-type PipelineResource struct {
+type ProcessResource struct {
 	client *cirroclient.Client
 }
 
-type PipelineResourceModel struct {
+type ProcessResourceModel struct {
 	ID                   types.String `tfsdk:"id"`
 	Name                 types.String `tfsdk:"name"`
 	Description          types.String `tfsdk:"description"`
@@ -91,13 +91,13 @@ var customSettingsAttrTypes = map[string]attr.Type{
 	"commit_hash":     types.StringType,
 }
 
-func (r *PipelineResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_pipeline"
+func (r *ProcessResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_process"
 }
 
-func (r *PipelineResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *ProcessResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages a custom Cirro pipeline (process). Destroying archives the pipeline.",
+		Description: "Manages a custom Cirro process (pipeline or ingest data type). Destroying archives the process.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Required:    true,
@@ -111,14 +111,14 @@ func (r *PipelineResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "Friendly name for the pipeline (4-80 characters).",
+				Description: "Friendly name for the process (4-80 characters).",
 				Validators: []validator.String{
 					stringvalidator.LengthBetween(4, 80),
 				},
 			},
 			"description": schema.StringAttribute{
 				Required:    true,
-				Description: "Description of the pipeline (4-500 characters).",
+				Description: "Description of the process (4-500 characters).",
 				Validators: []validator.String{
 					stringvalidator.LengthBetween(4, 500),
 				},
@@ -133,21 +133,21 @@ func (r *PipelineResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"child_process_ids": schema.ListAttribute{
 				Required:    true,
 				ElementType: types.StringType,
-				Description: "IDs of pipelines that can be run downstream of this one.",
+				Description: "IDs of processes that can be run downstream of this one.",
 			},
 			"parent_process_ids": schema.ListAttribute{
 				Required:    true,
 				ElementType: types.StringType,
-				Description: "IDs of processes that produce input for this pipeline.",
+				Description: "IDs of processes that produce input for this one.",
 			},
 			"linked_project_ids": schema.ListAttribute{
 				Required:    true,
 				ElementType: types.StringType,
-				Description: "IDs of projects that can run this pipeline.",
+				Description: "IDs of projects that can run this process.",
 			},
 			"data_type": schema.StringAttribute{
 				Optional:    true,
-				Description: "Name of the data type this pipeline produces.",
+				Description: "Name of the data type this process produces.",
 			},
 			"category": schema.StringAttribute{
 				Optional:    true,
@@ -155,33 +155,33 @@ func (r *PipelineResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"documentation_url": schema.StringAttribute{
 				Optional:    true,
-				Description: "Link to pipeline documentation.",
+				Description: "Link to process documentation.",
 			},
 			"file_requirements_message": schema.StringAttribute{
 				Optional:    true,
-				Description: "Description of the files to be uploaded (ingest pipelines).",
+				Description: "Description of the files to be uploaded (INGEST processes).",
 			},
 			"is_tenant_wide": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
 				Default:     booldefault.StaticBool(false),
-				Description: "Whether the pipeline is shared across the entire tenant.",
+				Description: "Whether the process is shared across the entire tenant.",
 			},
 			"allow_multiple_sources": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
 				Default:     booldefault.StaticBool(false),
-				Description: "Whether the pipeline accepts multiple dataset sources.",
+				Description: "Whether the process accepts multiple dataset sources.",
 			},
 			"uses_sample_sheet": schema.BoolAttribute{
 				Optional:    true,
 				Computed:    true,
 				Default:     booldefault.StaticBool(false),
-				Description: "Whether the pipeline uses the Cirro-provided sample sheet.",
+				Description: "Whether the process uses the Cirro-provided sample sheet.",
 			},
 			"pipeline_code": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Location of the pipeline analysis code (not required for INGEST).",
+				Description: "Location of the workflow analysis code (not required for INGEST).",
 				Attributes: map[string]schema.Attribute{
 					"repository_path": schema.StringAttribute{
 						Required:    true,
@@ -189,7 +189,7 @@ func (r *PipelineResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 					},
 					"version": schema.StringAttribute{
 						Required:    true,
-						Description: "Branch, tag, or commit hash of the pipeline code.",
+						Description: "Branch, tag, or commit hash of the workflow code.",
 					},
 					"repository_type": schema.StringAttribute{
 						Required:    true,
@@ -200,7 +200,7 @@ func (r *PipelineResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 					},
 					"entry_point": schema.StringAttribute{
 						Required:    true,
-						Description: "Main script for running the pipeline (e.g. main.nf).",
+						Description: "Main script for running the workflow (e.g. main.nf).",
 					},
 					"executor_version": schema.StringAttribute{
 						Optional:    true,
@@ -212,7 +212,7 @@ func (r *PipelineResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			},
 			"custom_settings": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "Location of the process definition in a GitHub repository.",
+				Description: "Location of the Cirro process definition in a GitHub repository.",
 				Attributes: map[string]schema.Attribute{
 					"repository": schema.StringAttribute{
 						Required:    true,
@@ -255,25 +255,25 @@ func (r *PipelineResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			// Computed
 			"owner": schema.StringAttribute{
 				Computed:    true,
-				Description: "Username of the pipeline creator.",
+				Description: "Username of the process creator.",
 			},
 			"is_archived": schema.BoolAttribute{
 				Computed:    true,
-				Description: "Whether the pipeline has been archived.",
+				Description: "Whether the process has been archived.",
 			},
 			"created_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Timestamp when the pipeline was created (ISO 8601).",
+				Description: "Timestamp when the process was created (ISO 8601).",
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
-				Description: "Timestamp when the pipeline was last updated (ISO 8601).",
+				Description: "Timestamp when the process was last updated (ISO 8601).",
 			},
 		},
 	}
 }
 
-func (r *PipelineResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *ProcessResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -285,8 +285,8 @@ func (r *PipelineResource) Configure(_ context.Context, req resource.ConfigureRe
 	r.client = client
 }
 
-func (r *PipelineResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan PipelineResourceModel
+func (r *ProcessResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan ProcessResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -300,13 +300,13 @@ func (r *PipelineResource) Create(ctx context.Context, req resource.CreateReques
 
 	_, err := r.client.CreateProcess(ctx, input)
 	if err != nil {
-		resp.Diagnostics.AddError("Error creating pipeline", err.Error())
+		resp.Diagnostics.AddError("Error creating process", err.Error())
 		return
 	}
 
 	process, err := r.client.GetProcess(ctx, plan.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading pipeline after create", err.Error())
+		resp.Diagnostics.AddError("Error reading process after create", err.Error())
 		return
 	}
 
@@ -314,8 +314,8 @@ func (r *PipelineResource) Create(ctx context.Context, req resource.CreateReques
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-func (r *PipelineResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state PipelineResourceModel
+func (r *ProcessResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state ProcessResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -323,7 +323,7 @@ func (r *PipelineResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	process, err := r.client.GetProcess(ctx, state.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading pipeline", err.Error())
+		resp.Diagnostics.AddError("Error reading process", err.Error())
 		return
 	}
 
@@ -331,8 +331,8 @@ func (r *PipelineResource) Read(ctx context.Context, req resource.ReadRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-func (r *PipelineResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan PipelineResourceModel
+func (r *ProcessResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan ProcessResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -345,13 +345,13 @@ func (r *PipelineResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	if err := r.client.UpdateProcess(ctx, plan.ID.ValueString(), input); err != nil {
-		resp.Diagnostics.AddError("Error updating pipeline", err.Error())
+		resp.Diagnostics.AddError("Error updating process", err.Error())
 		return
 	}
 
 	process, err := r.client.GetProcess(ctx, plan.ID.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Error reading pipeline after update", err.Error())
+		resp.Diagnostics.AddError("Error reading process after update", err.Error())
 		return
 	}
 
@@ -359,33 +359,33 @@ func (r *PipelineResource) Update(ctx context.Context, req resource.UpdateReques
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-func (r *PipelineResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var state PipelineResourceModel
+func (r *ProcessResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state ProcessResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	if err := r.client.ArchiveProcess(ctx, state.ID.ValueString()); err != nil {
-		resp.Diagnostics.AddError("Error archiving pipeline", err.Error())
+		resp.Diagnostics.AddError("Error archiving process", err.Error())
 	}
 }
 
-func (r *PipelineResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *ProcessResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	process, err := r.client.GetProcess(ctx, req.ID)
 	if err != nil {
-		resp.Diagnostics.AddError("Error importing pipeline", err.Error())
+		resp.Diagnostics.AddError("Error importing process", err.Error())
 		return
 	}
 
-	var state PipelineResourceModel
+	var state ProcessResourceModel
 	resp.Diagnostics.Append(processDetailToState(ctx, process, &state)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 // ---- helpers ----
 
-func planToProcessInput(ctx context.Context, m PipelineResourceModel) (cirroclient.ProcessInput, diag.Diagnostics) {
+func planToProcessInput(ctx context.Context, m ProcessResourceModel) (cirroclient.ProcessInput, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	var childIDs, parentIDs, linkedIDs []string
@@ -436,7 +436,7 @@ func planToProcessInput(ctx context.Context, m PipelineResourceModel) (cirroclie
 	return input, diags
 }
 
-func processDetailToState(ctx context.Context, p *cirroclient.ProcessDetail, m *PipelineResourceModel) diag.Diagnostics {
+func processDetailToState(ctx context.Context, p *cirroclient.ProcessDetail, m *ProcessResourceModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 
 	m.ID = types.StringValue(p.ID)
