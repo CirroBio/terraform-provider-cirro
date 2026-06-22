@@ -32,6 +32,3 @@ dist/
 .vscode/
 *.swp
 *.swo
-
-# Docs (generated)
-docs/
