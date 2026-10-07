@@ -45,6 +45,7 @@ type ProjectResourceModel struct {
 	CreatedAt         types.String `tfsdk:"created_at"`
 	UpdatedAt         types.String `tfsdk:"updated_at"`
 	DeployedAt        types.String `tfsdk:"deployed_at"`
+	DeployedVersion   types.String `tfsdk:"deployed_version"`
 }
 
 type ProjectSettingsModel struct {
@@ -77,6 +78,7 @@ type ProjectSettingsModel struct {
 	HasPipelinesEnabled         types.Bool `tfsdk:"has_pipelines_enabled"`
 	HasWorkspacesEnabled        types.Bool `tfsdk:"has_workspaces_enabled"`
 	HasSharedFilesystemsEnabled types.Bool `tfsdk:"has_shared_filesystems_enabled"`
+	IsOmicsAvailable            types.Bool `tfsdk:"is_omics_available"`
 }
 
 type ContactModel struct {
@@ -122,6 +124,7 @@ var settingsAttrTypes = map[string]attr.Type{
 	"has_pipelines_enabled":           types.BoolType,
 	"has_workspaces_enabled":          types.BoolType,
 	"has_shared_filesystems_enabled":  types.BoolType,
+	"is_omics_available":              types.BoolType,
 }
 
 var contactAttrTypes = map[string]attr.Type{
@@ -192,6 +195,10 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"deployed_at": schema.StringAttribute{
 				Computed:    true,
 				Description: "Timestamp the project was last deployed (ISO 8601).",
+			},
+			"deployed_version": schema.StringAttribute{
+				Computed:    true,
+				Description: "Version of the project infrastructure that was last deployed.",
 			},
 			"classification_ids": schema.ListAttribute{
 				Optional:    true,
@@ -342,6 +349,10 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 					"has_shared_filesystems_enabled": schema.BoolAttribute{
 						Computed:    true,
 						Description: "Whether shared filesystems are enabled.",
+					},
+					"is_omics_available": schema.BoolAttribute{
+						Computed:    true,
+						Description: "Whether the project is deployed with the resources needed for AWS HealthOmics runs.",
 					},
 				},
 			},
@@ -565,6 +576,7 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 	m.CreatedAt = types.StringValue(p.CreatedAt)
 	m.UpdatedAt = types.StringValue(p.UpdatedAt)
 	m.DeployedAt = types.StringValue(p.DeployedAt)
+	m.DeployedVersion = types.StringValue(p.DeployedVersion)
 
 	classIDs, d := types.ListValueFrom(ctx, types.StringType, p.ClassificationIDs)
 	diags.Append(d...)
@@ -630,6 +642,7 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 		"has_pipelines_enabled":           types.BoolValue(p.Settings.HasPipelinesEnabled),
 		"has_workspaces_enabled":          types.BoolValue(p.Settings.HasWorkspacesEnabled),
 		"has_shared_filesystems_enabled":  types.BoolValue(p.Settings.HasSharedFilesystemsEnabled),
+		"is_omics_available":              types.BoolValue(p.Settings.IsOmicsAvailable),
 	})
 	diags.Append(d...)
 	m.Settings = settings

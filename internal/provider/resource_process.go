@@ -5,12 +5,15 @@ import (
 	"fmt"
 
 	cirroclient "github.com/cirro-bio/terraform-provider-cirro/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -47,6 +50,11 @@ type ProcessResourceModel struct {
 	UsesSampleSheet      types.Bool   `tfsdk:"uses_sample_sheet"`
 	PipelineCode         types.Object `tfsdk:"pipeline_code"`
 	CustomSettings       types.Object `tfsdk:"custom_settings"`
+	Maintainers          types.List   `tfsdk:"maintainers"`
+	ExecutionModes       types.List   `tfsdk:"execution_modes"`
+	Tags                 types.List   `tfsdk:"tags"`
+	ConfigSource         types.String `tfsdk:"config_source"`
+	FileMappingRules     types.List   `tfsdk:"file_mapping_rules"`
 	// Computed
 	Owner      types.String `tfsdk:"owner"`
 	IsArchived types.Bool   `tfsdk:"is_archived"`
@@ -71,6 +79,34 @@ type CustomSettingsModel struct {
 	LastSync   types.String `tfsdk:"last_sync"`
 	SyncStatus types.String `tfsdk:"sync_status"`
 	CommitHash types.String `tfsdk:"commit_hash"`
+}
+
+type FileMappingRuleModel struct {
+	Description      types.String `tfsdk:"description"`
+	Min              types.Int64  `tfsdk:"min"`
+	Max              types.Int64  `tfsdk:"max"`
+	IsSample         types.Bool   `tfsdk:"is_sample"`
+	FileNamePatterns types.List   `tfsdk:"file_name_patterns"`
+}
+
+type FileNamePatternModel struct {
+	ExampleName           types.String `tfsdk:"example_name"`
+	Description           types.String `tfsdk:"description"`
+	SampleMatchingPattern types.String `tfsdk:"sample_matching_pattern"`
+}
+
+var fileNamePatternAttrTypes = map[string]attr.Type{
+	"example_name":            types.StringType,
+	"description":             types.StringType,
+	"sample_matching_pattern": types.StringType,
+}
+
+var fileMappingRuleAttrTypes = map[string]attr.Type{
+	"description":        types.StringType,
+	"min":                types.Int64Type,
+	"max":                types.Int64Type,
+	"is_sample":          types.BoolType,
+	"file_name_patterns": types.ListType{ElemType: types.ObjectType{AttrTypes: fileNamePatternAttrTypes}},
 }
 
 var pipelineCodeAttrTypes = map[string]attr.Type{
@@ -252,6 +288,107 @@ func (r *ProcessResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 					},
 				},
 			},
+			"maintainers": schema.ListAttribute{
+				Optional:    true,
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Usernames of other users who can manage the process.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"execution_modes": schema.ListAttribute{
+				Optional:    true,
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Execution modes the pipeline supports: STANDARD (AWS Batch) and/or HEALTHOMICS (AWS HealthOmics).",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
+				Validators: []validator.List{
+					listvalidator.SizeAtLeast(1),
+					listvalidator.ValueStringsAre(stringvalidator.OneOf("STANDARD", "HEALTHOMICS")),
+				},
+			},
+			"tags": schema.ListAttribute{
+				Optional:    true,
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Process tags.",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"config_source": schema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: "Storage backend for the process configuration files: WITH_PROCESS, EXTERNAL, or STORAGE.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+				Validators: []validator.String{
+					stringvalidator.OneOf("WITH_PROCESS", "EXTERNAL", "STORAGE"),
+				},
+			},
+			"file_mapping_rules": schema.ListNestedAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: "Rules describing the groups of files expected for the process (INGEST processes).",
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.UseStateForUnknown(),
+				},
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"description": schema.StringAttribute{
+							Required:    true,
+							Description: "Describes the group of files that meet a single file type criteria (1-500 characters).",
+							Validators: []validator.String{
+								stringvalidator.LengthBetween(1, 500),
+							},
+						},
+						"min": schema.Int64Attribute{
+							Optional:    true,
+							Description: "Minimum number of files to expect for the file type group.",
+							Validators: []validator.Int64{
+								int64validator.AtLeast(0),
+							},
+						},
+						"max": schema.Int64Attribute{
+							Optional:    true,
+							Description: "Maximum number of files to expect for the file type group.",
+							Validators: []validator.Int64{
+								int64validator.AtMost(50000),
+							},
+						},
+						"is_sample": schema.BoolAttribute{
+							Optional:    true,
+							Computed:    true,
+							Default:     booldefault.StaticBool(false),
+							Description: "Whether the file type is associated with a sample.",
+						},
+						"file_name_patterns": schema.ListNestedAttribute{
+							Required:    true,
+							Description: "File name patterns to expect for the file type group.",
+							NestedObject: schema.NestedAttributeObject{
+								Attributes: map[string]schema.Attribute{
+									"example_name": schema.StringAttribute{
+										Required:    true,
+										Description: "User-readable name for the file type used for display.",
+									},
+									"description": schema.StringAttribute{
+										Optional:    true,
+										Description: "File description.",
+									},
+									"sample_matching_pattern": schema.StringAttribute{
+										Required:    true,
+										Description: "Regex used to extract the sample name and other metadata from file names.",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 			// Computed
 			"owner": schema.StringAttribute{
 				Computed:    true,
@@ -422,6 +559,28 @@ func planToProcessInput(ctx context.Context, m ProcessResourceModel) (cirroclien
 		}
 	}
 
+	if isKnown(m.Maintainers) {
+		diags.Append(m.Maintainers.ElementsAs(ctx, &input.Maintainers, false)...)
+	}
+	if isKnown(m.ExecutionModes) {
+		diags.Append(m.ExecutionModes.ElementsAs(ctx, &input.ExecutionModes, false)...)
+	}
+	if isKnown(m.Tags) {
+		var tagStrings []string
+		diags.Append(m.Tags.ElementsAs(ctx, &tagStrings, false)...)
+		for _, t := range tagStrings {
+			input.Tags = append(input.Tags, cirroclient.Tag{Value: t})
+		}
+	}
+	if !m.ConfigSource.IsUnknown() {
+		input.ConfigSource = m.ConfigSource.ValueString()
+	}
+	if isKnown(m.FileMappingRules) {
+		rules, d := fileMappingRulesFromTF(ctx, m.FileMappingRules)
+		diags.Append(d...)
+		input.FileMappingRules = rules
+	}
+
 	if !m.CustomSettings.IsNull() && !m.CustomSettings.IsUnknown() {
 		var cs CustomSettingsModel
 		diags.Append(m.CustomSettings.As(ctx, &cs, basetypes.ObjectAsOptions{})...)
@@ -467,6 +626,28 @@ func processDetailToState(ctx context.Context, p *cirroclient.ProcessDetail, m *
 	diags.Append(d...)
 	m.LinkedProjectIDs = linkedIDs
 
+	maintainers, d := types.ListValueFrom(ctx, types.StringType, nonNil(p.Maintainers))
+	diags.Append(d...)
+	m.Maintainers = maintainers
+
+	execModes, d := types.ListValueFrom(ctx, types.StringType, nonNil(p.ExecutionModes))
+	diags.Append(d...)
+	m.ExecutionModes = execModes
+
+	tagStrings := make([]string, len(p.Tags))
+	for i, t := range p.Tags {
+		tagStrings[i] = t.Value
+	}
+	tags, d := types.ListValueFrom(ctx, types.StringType, tagStrings)
+	diags.Append(d...)
+	m.Tags = tags
+
+	m.ConfigSource = types.StringValue(p.ConfigSource)
+
+	rules, d := fileMappingRulesToTF(p.FileMappingRules)
+	diags.Append(d...)
+	m.FileMappingRules = rules
+
 	if p.PipelineCode != nil {
 		pc, d := types.ObjectValue(pipelineCodeAttrTypes, map[string]attr.Value{
 			"repository_path":  types.StringValue(p.PipelineCode.RepositoryPath),
@@ -498,4 +679,94 @@ func processDetailToState(ctx context.Context, p *cirroclient.ProcessDetail, m *
 	}
 
 	return diags
+}
+
+func isKnown(l types.List) bool {
+	return !l.IsNull() && !l.IsUnknown()
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+func fileMappingRulesFromTF(ctx context.Context, l types.List) ([]cirroclient.FileMappingRule, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	var ruleModels []FileMappingRuleModel
+	diags.Append(l.ElementsAs(ctx, &ruleModels, false)...)
+
+	rules := make([]cirroclient.FileMappingRule, 0, len(ruleModels))
+	for _, rm := range ruleModels {
+		rule := cirroclient.FileMappingRule{
+			Description: rm.Description.ValueString(),
+			IsSample:    rm.IsSample.ValueBool(),
+		}
+		if !rm.Min.IsNull() && !rm.Min.IsUnknown() {
+			v := int(rm.Min.ValueInt64())
+			rule.Min = &v
+		}
+		if !rm.Max.IsNull() && !rm.Max.IsUnknown() {
+			v := int(rm.Max.ValueInt64())
+			rule.Max = &v
+		}
+
+		var patternModels []FileNamePatternModel
+		diags.Append(rm.FileNamePatterns.ElementsAs(ctx, &patternModels, false)...)
+		for _, pm := range patternModels {
+			rule.FileNamePatterns = append(rule.FileNamePatterns, cirroclient.FileNamePattern{
+				ExampleName:           pm.ExampleName.ValueString(),
+				Description:           pm.Description.ValueString(),
+				SampleMatchingPattern: pm.SampleMatchingPattern.ValueString(),
+			})
+		}
+		rules = append(rules, rule)
+	}
+
+	return rules, diags
+}
+
+func fileMappingRulesToTF(rules []cirroclient.FileMappingRule) (types.List, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	ruleType := types.ObjectType{AttrTypes: fileMappingRuleAttrTypes}
+	patternType := types.ObjectType{AttrTypes: fileNamePatternAttrTypes}
+
+	ruleObjs := make([]attr.Value, len(rules))
+	for i, r := range rules {
+		patternObjs := make([]attr.Value, len(r.FileNamePatterns))
+		for j, p := range r.FileNamePatterns {
+			obj, d := types.ObjectValue(fileNamePatternAttrTypes, map[string]attr.Value{
+				"example_name":            types.StringValue(p.ExampleName),
+				"description":             nullableString(p.Description),
+				"sample_matching_pattern": types.StringValue(p.SampleMatchingPattern),
+			})
+			diags.Append(d...)
+			patternObjs[j] = obj
+		}
+		patterns, d := types.ListValue(patternType, patternObjs)
+		diags.Append(d...)
+
+		obj, d := types.ObjectValue(fileMappingRuleAttrTypes, map[string]attr.Value{
+			"description":        types.StringValue(r.Description),
+			"min":                optionalInt64(r.Min),
+			"max":                optionalInt64(r.Max),
+			"is_sample":          types.BoolValue(r.IsSample),
+			"file_name_patterns": patterns,
+		})
+		diags.Append(d...)
+		ruleObjs[i] = obj
+	}
+
+	list, d := types.ListValue(ruleType, ruleObjs)
+	diags.Append(d...)
+	return list, diags
+}
+
+func optionalInt64(v *int) types.Int64 {
+	if v == nil {
+		return types.Int64Null()
+	}
+	return types.Int64Value(int64(*v))
 }

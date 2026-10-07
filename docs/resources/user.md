@@ -28,7 +28,7 @@ resource "cirro_user" "example" {
 
 ### Required
 
-- `email` (String) Email address. Used to look up the user after invitation.
+- `email` (String) Email address, which Cirro also uses as the username.
 - `name` (String) Full name (3-70 characters).
 - `organization` (String) Organization name (2-40 characters).
 

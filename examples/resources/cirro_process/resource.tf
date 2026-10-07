@@ -16,7 +16,7 @@ resource "cirro_process" "nextflow_pipeline" {
   child_process_ids = []
 
   # Location of the Nextflow workflow code on GitHub
-  pipeline_code {
+  pipeline_code = {
     repository_path = "my-org/my-nextflow-workflow"
     version         = "main"
     repository_type = "GITHUB_PUBLIC"
@@ -24,7 +24,7 @@ resource "cirro_process" "nextflow_pipeline" {
   }
 
   # Location of the Cirro process definition (UI form, file manifest, etc.)
-  custom_settings {
+  custom_settings = {
     repository      = "my-org/my-nextflow-workflow"
     branch          = "main"
     folder          = ".cirro"

@@ -31,7 +31,7 @@ resource "cirro_process" "nextflow_pipeline" {
   child_process_ids = []
 
   # Location of the Nextflow workflow code on GitHub
-  pipeline_code {
+  pipeline_code = {
     repository_path = "my-org/my-nextflow-workflow"
     version         = "main"
     repository_type = "GITHUB_PUBLIC"
@@ -39,7 +39,7 @@ resource "cirro_process" "nextflow_pipeline" {
   }
 
   # Location of the Cirro process definition (UI form, file manifest, etc.)
-  custom_settings {
+  custom_settings = {
     repository      = "my-org/my-nextflow-workflow"
     branch          = "main"
     folder          = ".cirro"
@@ -68,12 +68,17 @@ resource "cirro_process" "nextflow_pipeline" {
 
 - `allow_multiple_sources` (Boolean) Whether the process accepts multiple dataset sources.
 - `category` (String) Category label shown in the UI (e.g. Microbial Analysis).
+- `config_source` (String) Storage backend for the process configuration files: WITH_PROCESS, EXTERNAL, or STORAGE.
 - `custom_settings` (Attributes) Location of the Cirro process definition in a GitHub repository. (see [below for nested schema](#nestedatt--custom_settings))
 - `data_type` (String) Name of the data type this process produces.
 - `documentation_url` (String) Link to process documentation.
+- `execution_modes` (List of String) Execution modes the pipeline supports: STANDARD (AWS Batch) and/or HEALTHOMICS (AWS HealthOmics).
+- `file_mapping_rules` (Attributes List) Rules describing the groups of files expected for the process (INGEST processes). (see [below for nested schema](#nestedatt--file_mapping_rules))
 - `file_requirements_message` (String) Description of the files to be uploaded (INGEST processes).
 - `is_tenant_wide` (Boolean) Whether the process is shared across the entire tenant.
+- `maintainers` (List of String) Usernames of other users who can manage the process.
 - `pipeline_code` (Attributes) Location of the workflow analysis code (not required for INGEST). (see [below for nested schema](#nestedatt--pipeline_code))
+- `tags` (List of String) Process tags.
 - `uses_sample_sheet` (Boolean) Whether the process uses the Cirro-provided sample sheet.
 
 ### Read-Only
@@ -101,6 +106,34 @@ Read-Only:
 - `commit_hash` (String) Commit hash of the last successful sync.
 - `last_sync` (String) Timestamp of the last successful sync from the repository.
 - `sync_status` (String) Status of the last repository sync.
+
+
+<a id="nestedatt--file_mapping_rules"></a>
+### Nested Schema for `file_mapping_rules`
+
+Required:
+
+- `description` (String) Describes the group of files that meet a single file type criteria (1-500 characters).
+- `file_name_patterns` (Attributes List) File name patterns to expect for the file type group. (see [below for nested schema](#nestedatt--file_mapping_rules--file_name_patterns))
+
+Optional:
+
+- `is_sample` (Boolean) Whether the file type is associated with a sample.
+- `max` (Number) Maximum number of files to expect for the file type group.
+- `min` (Number) Minimum number of files to expect for the file type group.
+
+<a id="nestedatt--file_mapping_rules--file_name_patterns"></a>
+### Nested Schema for `file_mapping_rules.file_name_patterns`
+
+Required:
+
+- `example_name` (String) User-readable name for the file type used for display.
+- `sample_matching_pattern` (String) Regex used to extract the sample name and other metadata from file names.
+
+Optional:
+
+- `description` (String) File description.
+
 
 
 <a id="nestedatt--pipeline_code"></a>

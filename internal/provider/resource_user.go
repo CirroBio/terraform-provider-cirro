@@ -60,7 +60,7 @@ func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 			},
 			"email": schema.StringAttribute{
 				Required:    true,
-				Description: "Email address. Used to look up the user after invitation.",
+				Description: "Email address, which Cirro also uses as the username.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -125,11 +125,8 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	found, err := r.client.FindUserByEmail(ctx, plan.Email.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Error locating invited user", err.Error())
-		return
-	}
+	// Cirro uses the email address as the username.
+	username := plan.Email.ValueString()
 
 	var globalRoles []string
 	resp.Diagnostics.Append(plan.GlobalRoles.ElementsAs(ctx, &globalRoles, false)...)
@@ -140,14 +137,14 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 	if !plan.Phone.IsNull() || !plan.Department.IsNull() || !plan.JobTitle.IsNull() || len(globalRoles) > 0 {
 		updateReq := buildUpdateRequest(plan)
 		updateReq.GlobalRoles = globalRoles
-		_, err = r.client.UpdateUser(ctx, found.Username, updateReq)
+		_, err = r.client.UpdateUser(ctx, username, updateReq)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating user profile after invite", err.Error())
 			return
 		}
 	}
 
-	user, err := r.client.GetUser(ctx, found.Username)
+	user, err := r.client.GetUser(ctx, username)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading user after invite", err.Error())
 		return

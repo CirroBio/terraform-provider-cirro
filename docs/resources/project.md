@@ -169,6 +169,7 @@ resource "cirro_project" "byoa" {
 - `created_at` (String) Timestamp the project was created (ISO 8601).
 - `created_by` (String) User who created the project.
 - `deployed_at` (String) Timestamp the project was last deployed (ISO 8601).
+- `deployed_version` (String) Version of the project infrastructure that was last deployed.
 - `id` (String) Project identifier.
 - `organization` (String) Organization the project belongs to.
 - `status` (String) Project status.
@@ -225,6 +226,7 @@ Read-Only:
 - `has_pipelines_enabled` (Boolean) Whether pipeline execution is enabled.
 - `has_shared_filesystems_enabled` (Boolean) Whether shared filesystems are enabled.
 - `has_workspaces_enabled` (Boolean) Whether interactive workspaces are enabled.
+- `is_omics_available` (Boolean) Whether the project is deployed with the resources needed for AWS HealthOmics runs.
 
 
 <a id="nestedatt--account"></a>

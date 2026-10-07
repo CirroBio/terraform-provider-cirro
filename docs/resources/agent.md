@@ -40,13 +40,13 @@ resource "cirro_agent" "example" {
 ### Optional
 
 - `environment_configuration` (Map of String) Environment configuration key-value pairs passed to the agent.
+- `id` (String) Unique ID of the agent. Assigned by Cirro if not set. Changing this forces a new agent.
 - `tags` (Map of String) Key-value tags displayed to users when selecting this agent.
 
 ### Read-Only
 
 - `created_at` (String)
 - `created_by` (String)
-- `id` (String) The ID of this resource.
 - `registration_agent_version` (String) Agent software version reported after registration.
 - `registration_hostname` (String) Hostname reported by the agent after registration.
 - `registration_os` (String) Operating system reported by the agent after registration.

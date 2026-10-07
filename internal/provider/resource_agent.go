@@ -51,9 +51,12 @@ func (r *AgentResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 		Description: "Manages a Cirro compute agent. The agent software must be installed separately on your compute infrastructure and will register itself once running.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Optional:    true,
+				Computed:    true,
+				Description: "Unique ID of the agent. Assigned by Cirro if not set. Changing this forces a new agent.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"name": schema.StringAttribute{
@@ -242,12 +245,18 @@ func planToAgentInput(ctx context.Context, m AgentResourceModel) (cirroclient.Ag
 	var envConfig map[string]string
 	diags.Append(m.EnvironmentConfiguration.ElementsAs(ctx, &envConfig, false)...)
 
-	return cirroclient.AgentInput{
+	input := cirroclient.AgentInput{
 		Name:                     m.Name.ValueString(),
 		AgentRoleArn:             m.AgentRoleArn.ValueString(),
 		Tags:                     tags,
 		EnvironmentConfiguration: envConfig,
-	}, diags
+	}
+
+	if !m.ID.IsUnknown() {
+		input.ID = m.ID.ValueString()
+	}
+
+	return input, diags
 }
 
 func agentDetailToState(ctx context.Context, a *cirroclient.AgentDetail, m *AgentResourceModel) diag.Diagnostics {

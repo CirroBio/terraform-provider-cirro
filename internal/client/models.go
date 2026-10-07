@@ -30,6 +30,7 @@ type ProjectDetail struct {
 	CreatedAt         string          `json:"createdAt"`
 	UpdatedAt         string          `json:"updatedAt"`
 	DeployedAt        string          `json:"deployedAt"`
+	DeployedVersion   string          `json:"deployedVersion"`
 }
 
 type ProjectInput struct {
@@ -74,6 +75,7 @@ type ProjectSettings struct {
 	HasPipelinesEnabled         bool `json:"hasPipelinesEnabled,omitempty"`
 	HasWorkspacesEnabled        bool `json:"hasWorkspacesEnabled,omitempty"`
 	HasSharedFilesystemsEnabled bool `json:"hasSharedFilesystemsEnabled,omitempty"`
+	IsOmicsAvailable            bool `json:"isOmicsAvailable,omitempty"`
 }
 
 type Contact struct {
@@ -130,6 +132,9 @@ type UserDetail struct {
 	Department         string                  `json:"department"`
 	InvitedBy          string                  `json:"invitedBy"`
 	GlobalRoles        []string                `json:"globalRoles"`
+	Status             string                  `json:"status"`
+	SignUpTime         string                  `json:"signUpTime"`
+	LastSignedIn       string                  `json:"lastSignedIn"`
 	ProjectAssignments []UserProjectAssignment `json:"projectAssignments"`
 }
 
@@ -138,18 +143,6 @@ type UserProjectAssignment struct {
 	Role      string `json:"role"`
 	CreatedBy string `json:"createdBy"`
 	CreatedAt string `json:"createdAt"`
-}
-
-type UserDto struct {
-	Username     string `json:"username"`
-	Name         string `json:"name"`
-	Email        string `json:"email"`
-	Organization string `json:"organization"`
-}
-
-type PaginatedUsersResponse struct {
-	Items     []UserDto `json:"items"`
-	NextToken string    `json:"nextToken"`
 }
 
 type InviteUserRequest struct {
@@ -213,6 +206,7 @@ type AgentDetail struct {
 }
 
 type AgentInput struct {
+	ID                       string            `json:"id,omitempty"`
 	Name                     string            `json:"name"`
 	AgentRoleArn             string            `json:"agentRoleArn"`
 	Tags                     map[string]string `json:"tags,omitempty"`
@@ -246,6 +240,20 @@ type ClassificationInput struct {
 }
 
 // ---- Pipelines (Processes) ----
+
+type FileMappingRule struct {
+	Description      string            `json:"description"`
+	Min              *int              `json:"min,omitempty"`
+	Max              *int              `json:"max,omitempty"`
+	IsSample         bool              `json:"isSample"`
+	FileNamePatterns []FileNamePattern `json:"fileNamePatterns"`
+}
+
+type FileNamePattern struct {
+	ExampleName           string `json:"exampleName"`
+	Description           string `json:"description,omitempty"`
+	SampleMatchingPattern string `json:"sampleMatchingPattern"`
+}
 
 type PipelineCode struct {
 	RepositoryPath  string `json:"repositoryPath"`
@@ -283,6 +291,11 @@ type ProcessInput struct {
 	UsesSampleSheet      bool                    `json:"usesSampleSheet,omitempty"`
 	PipelineCode         *PipelineCode           `json:"pipelineCode,omitempty"`
 	CustomSettings       *CustomPipelineSettings `json:"customSettings,omitempty"`
+	Maintainers          []string                `json:"maintainers,omitempty"`
+	ExecutionModes       []string                `json:"executionModes,omitempty"`
+	FileMappingRules     []FileMappingRule       `json:"fileMappingRules,omitempty"`
+	Tags                 []Tag                   `json:"tags,omitempty"`
+	ConfigSource         string                  `json:"configSource,omitempty"`
 }
 
 type ProcessDetail struct {
@@ -305,6 +318,11 @@ type ProcessDetail struct {
 	IsArchived           bool                    `json:"isArchived"`
 	PipelineCode         *PipelineCode           `json:"pipelineCode"`
 	CustomSettings       *CustomPipelineSettings `json:"customSettings"`
+	Maintainers          []string                `json:"maintainers"`
+	ExecutionModes       []string                `json:"executionModes"`
+	FileMappingRules     []FileMappingRule       `json:"fileMappingRules"`
+	Tags                 []Tag                   `json:"tags"`
+	ConfigSource         string                  `json:"configSource"`
 	CreatedAt            string                  `json:"createdAt"`
 	UpdatedAt            string                  `json:"updatedAt"`
 }
