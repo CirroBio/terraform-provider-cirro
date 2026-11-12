@@ -184,6 +184,20 @@ resource "cirro_project" "byoa" {
 - `status_message` (String) Additional status detail.
 - `updated_at` (String) Timestamp the project was last updated (ISO 8601).
 
+<a id="nestedatt--account"></a>
+### Nested Schema for `account`
+
+Required:
+
+- `account_type` (String) BYOA or HOSTED. Cannot be changed after project creation.
+
+Optional:
+
+- `account_id` (String) AWS account ID (12-digit). Required for BYOA projects; assigned by Cirro for hosted projects when unset. Cannot be changed after project creation.
+- `account_name` (String) Name used to describe the account (BYOA projects).
+- `region_name` (String) AWS region code. Defaults to the region of the Cirro deployment.
+
+
 <a id="nestedatt--contacts"></a>
 ### Nested Schema for `contacts`
 
@@ -235,17 +249,3 @@ Read-Only:
 - `has_shared_filesystems_enabled` (Boolean) Whether shared filesystems are enabled.
 - `has_workspaces_enabled` (Boolean) Whether interactive workspaces are enabled.
 - `is_omics_available` (Boolean) Whether the project is deployed with the resources needed for AWS HealthOmics runs.
-
-
-<a id="nestedatt--account"></a>
-### Nested Schema for `account`
-
-Required:
-
-- `account_type` (String) BYOA or HOSTED. Cannot be changed after project creation.
-
-Optional:
-
-- `account_id` (String) AWS account ID (12-digit). Required for BYOA projects; assigned by Cirro for hosted projects when unset. Cannot be changed after project creation.
-- `account_name` (String) Name used to describe the account (BYOA projects).
-- `region_name` (String) AWS region code. Defaults to the region of the Cirro deployment.
