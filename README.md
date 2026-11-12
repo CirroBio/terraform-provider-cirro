@@ -14,7 +14,7 @@ terraform {
   required_providers {
     cirro = {
       source  = "cirro-bio/cirro"
-      version = "~> 0.2"
+      version = "~> 0.3"
     }
   }
 }
