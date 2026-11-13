@@ -2,15 +2,21 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
 
 	cirroclient "github.com/cirro-bio/terraform-provider-cirro/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -19,10 +25,22 @@ import (
 
 var _ resource.Resource = &ProjectResource{}
 var _ resource.ResourceWithImportState = &ProjectResource{}
+var _ resource.ResourceWithValidateConfig = &ProjectResource{}
 
 func NewProjectResource() resource.Resource {
 	return &ProjectResource{}
 }
+
+// The backend only accepts settings changes once a deployment has settled, so
+// Update waits for one of these statuses when the API reports the project busy.
+const (
+	projectSettleTimeout  = 30 * time.Minute
+	projectSettleInterval = 15 * time.Second
+)
+
+// emptyStringList is the default for optional list attributes. The API returns
+// an empty list (never null) for these, so state must hold the same.
+var emptyStringList = types.ListValueMust(types.StringType, []attr.Value{})
 
 type ProjectResource struct {
 	client *cirroclient.Client
@@ -46,6 +64,7 @@ type ProjectResourceModel struct {
 	UpdatedAt         types.String `tfsdk:"updated_at"`
 	DeployedAt        types.String `tfsdk:"deployed_at"`
 	DeployedVersion   types.String `tfsdk:"deployed_version"`
+	RoleVersion       types.String `tfsdk:"role_version"`
 }
 
 type ProjectSettingsModel struct {
@@ -200,13 +219,21 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Computed:    true,
 				Description: "Version of the project infrastructure that was last deployed.",
 			},
+			"role_version": schema.StringAttribute{
+				Computed:    true,
+				Description: "Version of the Cirro deployment role installed in the project's cloud account.",
+			},
 			"classification_ids": schema.ListAttribute{
 				Optional:    true,
+				Computed:    true,
+				Default:     listdefault.StaticValue(emptyStringList),
 				ElementType: types.StringType,
 				Description: "Data classification identifiers.",
 			},
 			"tags": schema.ListAttribute{
 				Optional:    true,
+				Computed:    true,
+				Default:     listdefault.StaticValue(emptyStringList),
 				ElementType: types.StringType,
 				Description: "Project tags.",
 			},
@@ -261,12 +288,16 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 					"service_connections": schema.ListAttribute{
 						Optional:    true,
 						Computed:    true,
+						Default:     listdefault.StaticValue(emptyStringList),
 						ElementType: types.StringType,
 						Description: "Service connection identifiers.",
 					},
 					"kms_arn": schema.StringAttribute{
 						Optional:    true,
-						Description: "AWS KMS key ARN for encryption.",
+						Description: "AWS KMS key ARN for encryption. Cannot be changed after project creation.",
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.RequiresReplace(),
+						},
 					},
 					"vpc_id": schema.StringAttribute{
 						Optional:    true,
@@ -274,28 +305,40 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 					},
 					"batch_subnets": schema.ListAttribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     listdefault.StaticValue(emptyStringList),
 						ElementType: types.StringType,
 						Description: "Subnet IDs used for batch compute (BYOA projects).",
 					},
 					"workspace_subnets": schema.ListAttribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     listdefault.StaticValue(emptyStringList),
 						ElementType: types.StringType,
 						Description: "Subnet IDs used for workspaces (BYOA projects).",
 					},
 					"max_spot_vcpu": schema.Int64Attribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     int64default.StaticInt64(0),
 						Description: "Maximum spot vCPU quota.",
 					},
 					"max_fpga_vcpu": schema.Int64Attribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     int64default.StaticInt64(0),
 						Description: "Maximum FPGA vCPU quota.",
 					},
 					"max_gpu_vcpu": schema.Int64Attribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     int64default.StaticInt64(0),
 						Description: "Maximum GPU vCPU quota.",
 					},
 					"enable_dragen": schema.BoolAttribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
 						Description: "Whether DRAGEN acceleration is enabled.",
 					},
 					"dragen_ami": schema.StringAttribute{
@@ -304,38 +347,56 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 					},
 					"max_workspaces_vcpu": schema.Int64Attribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     int64default.StaticInt64(0),
 						Description: "Maximum vCPU quota for workspaces.",
 					},
 					"max_workspaces_gpu_vcpu": schema.Int64Attribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     int64default.StaticInt64(0),
 						Description: "Maximum GPU vCPU quota for workspaces.",
 					},
 					"max_workspaces_per_user": schema.Int64Attribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     int64default.StaticInt64(0),
 						Description: "Maximum concurrent workspaces per user.",
 					},
 					"enable_advanced_gpu_config": schema.BoolAttribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
 						Description: "Whether advanced GPU configuration is enabled.",
 					},
 					"enable_custom_workspace_roles": schema.BoolAttribute{
 						Optional:    true,
-						Description: "Whether custom workspace roles are enabled.",
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+						Description: "Whether custom workspace roles are enabled (BYOA projects only).",
 					},
 					"max_shared_filesystems": schema.Int64Attribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     int64default.StaticInt64(0),
 						Description: "Maximum number of shared filesystems.",
 					},
 					"is_discoverable": schema.BoolAttribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
 						Description: "Whether the project is discoverable by other users.",
 					},
 					"is_shareable": schema.BoolAttribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
 						Description: "Whether datasets in the project can be shared.",
 					},
 					"is_ai_enabled": schema.BoolAttribute{
 						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
 						Description: "Whether AI features are enabled.",
 					},
 					"has_pipelines_enabled": schema.BoolAttribute{
@@ -357,21 +418,37 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 			"account": schema.SingleNestedAttribute{
-				Optional:    true,
-				Description: "Cloud account configuration (required for BYOA projects). account_type and account_id cannot be changed after creation — modifying them requires replacing the project.",
+				Required:    true,
+				Description: "Cloud account configuration. account_type must be set; BYOA also requires account_id, while HOSTED has Cirro provision the account. Attributes left unset are populated by Cirro. account_type and account_id cannot be changed after creation — modifying them requires replacing the project.",
 				Attributes: map[string]schema.Attribute{
 					"account_id": schema.StringAttribute{
 						Optional:    true,
-						Description: "AWS account ID (12-digit). Cannot be changed after project creation.",
+						Computed:    true,
+						Description: "AWS account ID (12-digit). Required for BYOA projects; assigned by Cirro for hosted projects when unset. Cannot be changed after project creation.",
 						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.RequiresReplace(),
+							stringplanmodifier.UseStateForUnknown(),
+							stringplanmodifier.RequiresReplaceIfConfigured(),
 						},
 					},
-					"account_name": schema.StringAttribute{Optional: true},
-					"region_name":  schema.StringAttribute{Optional: true},
+					"account_name": schema.StringAttribute{
+						Optional:    true,
+						Computed:    true,
+						Description: "Name used to describe the account (BYOA projects).",
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"region_name": schema.StringAttribute{
+						Optional:    true,
+						Computed:    true,
+						Description: "AWS region code. Defaults to the region of the Cirro deployment.",
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
 					"account_type": schema.StringAttribute{
 						Required:    true,
-						Description: "HOSTED or BYOA. Cannot be changed after project creation.",
+						Description: "BYOA or HOSTED. Cannot be changed after project creation.",
 						PlanModifiers: []planmodifier.String{
 							stringplanmodifier.RequiresReplace(),
 						},
@@ -379,6 +456,31 @@ func (r *ProjectResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 		},
+	}
+}
+
+// ValidateConfig rejects a BYOA account without an account ID at plan time.
+// Values that are not yet known (e.g. references to other resources) are
+// skipped; the API enforces the same rule on create.
+func (r *ProjectResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var account types.Object
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("account"), &account)...)
+	if resp.Diagnostics.HasError() || account.IsNull() || account.IsUnknown() {
+		return
+	}
+
+	var am CloudAccountModel
+	resp.Diagnostics.Append(account.As(ctx, &am, basetypes.ObjectAsOptions{})...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if am.AccountType.ValueString() == "BYOA" && !am.AccountID.IsUnknown() && am.AccountID.ValueString() == "" {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("account").AtName("account_id"),
+			"Missing account ID",
+			"account.account_id is required when account.account_type is \"BYOA\". Set it, or use account_type = \"HOSTED\" to have Cirro provision the account.",
+		)
 	}
 }
 
@@ -426,6 +528,10 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 
 	project, err := r.client.GetProject(ctx, state.ID.ValueString())
 	if err != nil {
+		if cirroclient.IsNotFound(err) {
+			resp.State.RemoveResource(ctx)
+			return
+		}
 		resp.Diagnostics.AddError("Error reading project", err.Error())
 		return
 	}
@@ -447,7 +553,25 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	project, err := r.client.UpdateProject(ctx, plan.ID.ValueString(), input)
+	id := plan.ID.ValueString()
+
+	// The API replaces the stored account with whatever is sent and rejects a
+	// missing account or a changed account ID, so fill anything the plan does
+	// not carry (e.g. an account ID assigned by Cirro) from the live project.
+	current, err := r.client.GetProject(ctx, id)
+	if err != nil {
+		resp.Diagnostics.AddError("Error reading project before update", err.Error())
+		return
+	}
+	input.Account = mergeAccount(input.Account, current.Account)
+
+	project, err := r.client.UpdateProject(ctx, id, input)
+	if err != nil && isProjectBusy(err) {
+		// A deployment is still in flight; wait for it to settle and retry once.
+		if err = waitForProjectSettled(ctx, r.client, id); err == nil {
+			project, err = r.client.UpdateProject(ctx, id, input)
+		}
+	}
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating project", err.Error())
 		return
@@ -479,6 +603,66 @@ func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportSt
 }
 
 // ---- helpers ----
+
+// mergeAccount fills any account field missing from in with the value currently
+// stored in Cirro.
+func mergeAccount(in, current *cirroclient.CloudAccount) *cirroclient.CloudAccount {
+	if current == nil {
+		return in
+	}
+	if in == nil {
+		out := *current
+		return &out
+	}
+	out := *in
+	if out.AccountID == "" {
+		out.AccountID = current.AccountID
+	}
+	if out.AccountName == "" {
+		out.AccountName = current.AccountName
+	}
+	if out.RegionName == "" {
+		out.RegionName = current.RegionName
+	}
+	if out.AccountType == "" {
+		out.AccountType = current.AccountType
+	}
+	return &out
+}
+
+// isProjectBusy reports whether an update was rejected because the project is
+// still being deployed.
+func isProjectBusy(err error) bool {
+	var apiErr *cirroclient.APIError
+	return errors.As(err, &apiErr) &&
+		apiErr.StatusCode == http.StatusBadRequest &&
+		strings.Contains(apiErr.Body, "is being updated")
+}
+
+// waitForProjectSettled polls until the project reaches a status in which the
+// API accepts settings changes.
+func waitForProjectSettled(ctx context.Context, c *cirroclient.Client, id string) error {
+	ctx, cancel := context.WithTimeout(ctx, projectSettleTimeout)
+	defer cancel()
+	ticker := time.NewTicker(projectSettleInterval)
+	defer ticker.Stop()
+
+	for {
+		p, err := c.GetProject(ctx, id)
+		if err != nil {
+			return err
+		}
+		switch p.Status {
+		case "COMPLETED", "FAILED", "SUSPENDED":
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for project %s to finish deploying (status %s)", id, p.Status)
+		case <-ticker.C:
+		}
+	}
+}
 
 func planToProjectInput(ctx context.Context, plan ProjectResourceModel) (cirroclient.ProjectInput, diag.Diagnostics) {
 	var diags diag.Diagnostics
@@ -577,18 +761,15 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 	m.UpdatedAt = types.StringValue(p.UpdatedAt)
 	m.DeployedAt = types.StringValue(p.DeployedAt)
 	m.DeployedVersion = types.StringValue(p.DeployedVersion)
+	m.RoleVersion = types.StringValue(p.RoleVersion)
 
-	classIDs, d := types.ListValueFrom(ctx, types.StringType, p.ClassificationIDs)
-	diags.Append(d...)
-	m.ClassificationIDs = classIDs
+	m.ClassificationIDs = stringListValue(p.ClassificationIDs)
 
 	tagStrings := make([]string, len(p.Tags))
 	for i, t := range p.Tags {
 		tagStrings[i] = t.Value
 	}
-	tags, d := types.ListValueFrom(ctx, types.StringType, tagStrings)
-	diags.Append(d...)
-	m.Tags = tags
+	m.Tags = stringListValue(tagStrings)
 
 	// contacts
 	contactObjs := make([]attr.Value, len(p.Contacts))
@@ -607,12 +788,6 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 	m.Contacts = contacts
 
 	// settings
-	svcConns, d := types.ListValueFrom(ctx, types.StringType, p.Settings.ServiceConnections)
-	diags.Append(d...)
-	batchSubnets, d := types.ListValueFrom(ctx, types.StringType, p.Settings.BatchSubnets)
-	diags.Append(d...)
-	workspaceSubnets, d := types.ListValueFrom(ctx, types.StringType, p.Settings.WorkspaceSubnets)
-	diags.Append(d...)
 	settings, d := types.ObjectValue(settingsAttrTypes, map[string]attr.Value{
 		"budget_amount":                   types.Int64Value(int64(p.Settings.BudgetAmount)),
 		"budget_period":                   types.StringValue(p.Settings.BudgetPeriod),
@@ -620,25 +795,25 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 		"enable_sftp":                     types.BoolValue(p.Settings.EnableSftp),
 		"retention_policy_days":           types.Int64Value(int64(p.Settings.RetentionPolicyDays)),
 		"temporary_storage_lifetime_days": types.Int64Value(int64(p.Settings.TemporaryStorageLifetimeDays)),
-		"service_connections":             svcConns,
-		"kms_arn":                         types.StringValue(p.Settings.KmsArn),
-		"vpc_id":                          types.StringValue(p.Settings.VpcID),
-		"batch_subnets":                   nullableList(ctx, batchSubnets, p.Settings.BatchSubnets),
-		"workspace_subnets":               nullableList(ctx, workspaceSubnets, p.Settings.WorkspaceSubnets),
-		"max_spot_vcpu":                   nullableInt64(p.Settings.MaxSpotVCPU),
-		"max_fpga_vcpu":                   nullableInt64(p.Settings.MaxFPGAVCPU),
-		"max_gpu_vcpu":                    nullableInt64(p.Settings.MaxGPUVCPU),
-		"enable_dragen":                   nullableBool(p.Settings.EnableDragen),
+		"service_connections":             stringListValue(p.Settings.ServiceConnections),
+		"kms_arn":                         nullableString(p.Settings.KmsArn),
+		"vpc_id":                          nullableString(p.Settings.VpcID),
+		"batch_subnets":                   stringListValue(p.Settings.BatchSubnets),
+		"workspace_subnets":               stringListValue(p.Settings.WorkspaceSubnets),
+		"max_spot_vcpu":                   types.Int64Value(int64(p.Settings.MaxSpotVCPU)),
+		"max_fpga_vcpu":                   types.Int64Value(int64(p.Settings.MaxFPGAVCPU)),
+		"max_gpu_vcpu":                    types.Int64Value(int64(p.Settings.MaxGPUVCPU)),
+		"enable_dragen":                   types.BoolValue(p.Settings.EnableDragen),
 		"dragen_ami":                      nullableString(p.Settings.DragenAmi),
-		"max_workspaces_vcpu":             nullableInt64(p.Settings.MaxWorkspacesVCPU),
-		"max_workspaces_gpu_vcpu":         nullableInt64(p.Settings.MaxWorkspacesGPUVCPU),
-		"max_workspaces_per_user":         nullableInt64(p.Settings.MaxWorkspacesPerUser),
-		"enable_advanced_gpu_config":      nullableBool(p.Settings.EnableAdvancedGpuConfig),
-		"enable_custom_workspace_roles":   nullableBool(p.Settings.EnableCustomWorkspaceRoles),
-		"max_shared_filesystems":          nullableInt64(p.Settings.MaxSharedFilesystems),
-		"is_discoverable":                 nullableBool(p.Settings.IsDiscoverable),
-		"is_shareable":                    nullableBool(p.Settings.IsShareable),
-		"is_ai_enabled":                   nullableBool(p.Settings.IsAiEnabled),
+		"max_workspaces_vcpu":             types.Int64Value(int64(p.Settings.MaxWorkspacesVCPU)),
+		"max_workspaces_gpu_vcpu":         types.Int64Value(int64(p.Settings.MaxWorkspacesGPUVCPU)),
+		"max_workspaces_per_user":         types.Int64Value(int64(p.Settings.MaxWorkspacesPerUser)),
+		"enable_advanced_gpu_config":      types.BoolValue(p.Settings.EnableAdvancedGpuConfig),
+		"enable_custom_workspace_roles":   types.BoolValue(p.Settings.EnableCustomWorkspaceRoles),
+		"max_shared_filesystems":          types.Int64Value(int64(p.Settings.MaxSharedFilesystems)),
+		"is_discoverable":                 types.BoolValue(p.Settings.IsDiscoverable),
+		"is_shareable":                    types.BoolValue(p.Settings.IsShareable),
+		"is_ai_enabled":                   types.BoolValue(p.Settings.IsAiEnabled),
 		"has_pipelines_enabled":           types.BoolValue(p.Settings.HasPipelinesEnabled),
 		"has_workspaces_enabled":          types.BoolValue(p.Settings.HasWorkspacesEnabled),
 		"has_shared_filesystems_enabled":  types.BoolValue(p.Settings.HasSharedFilesystemsEnabled),
@@ -650,9 +825,9 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 	// account
 	if p.Account != nil {
 		acct, d := types.ObjectValue(accountAttrTypes, map[string]attr.Value{
-			"account_id":   types.StringValue(p.Account.AccountID),
-			"account_name": types.StringValue(p.Account.AccountName),
-			"region_name":  types.StringValue(p.Account.RegionName),
+			"account_id":   nullableString(p.Account.AccountID),
+			"account_name": nullableString(p.Account.AccountName),
+			"region_name":  nullableString(p.Account.RegionName),
 			"account_type": types.StringValue(p.Account.AccountType),
 		})
 		diags.Append(d...)
@@ -664,32 +839,21 @@ func projectDetailToState(ctx context.Context, p *cirroclient.ProjectDetail, m *
 	return diags
 }
 
-// nullableInt64 returns null when v is zero so Optional-only attributes stay
-// null in state when the API does not set them.
-func nullableInt64(v int) attr.Value {
-	if v == 0 {
-		return types.Int64Null()
+// stringListValue converts a slice to a known list; nil becomes an empty list
+// rather than null.
+func stringListValue(raw []string) types.List {
+	elems := make([]attr.Value, len(raw))
+	for i, s := range raw {
+		elems[i] = types.StringValue(s)
 	}
-	return types.Int64Value(int64(v))
+	return types.ListValueMust(types.StringType, elems)
 }
 
-func nullableBool(v bool) attr.Value {
-	if !v {
-		return types.BoolNull()
-	}
-	return types.BoolValue(v)
-}
-
+// nullableString returns null when v is empty so Optional attributes stay null
+// in state when the API does not set them.
 func nullableString(v string) attr.Value {
 	if v == "" {
 		return types.StringNull()
 	}
 	return types.StringValue(v)
-}
-
-func nullableList(_ context.Context, list types.List, raw []string) attr.Value {
-	if len(raw) == 0 {
-		return types.ListNull(types.StringType)
-	}
-	return list
 }

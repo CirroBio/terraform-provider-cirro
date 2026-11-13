@@ -78,6 +78,7 @@ resource "cirro_process" "nextflow_pipeline" {
 - `is_tenant_wide` (Boolean) Whether the process is shared across the entire tenant.
 - `maintainers` (List of String) Usernames of other users who can manage the process.
 - `pipeline_code` (Attributes) Location of the workflow analysis code (not required for INGEST). (see [below for nested schema](#nestedatt--pipeline_code))
+- `requires_internet` (Boolean) Whether the pipeline requires Internet access to function (only applicable to AWS HealthOmics).
 - `tags` (List of String) Process tags.
 - `uses_sample_sheet` (Boolean) Whether the process uses the Cirro-provided sample sheet.
 

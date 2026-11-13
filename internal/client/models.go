@@ -31,6 +31,7 @@ type ProjectDetail struct {
 	UpdatedAt         string          `json:"updatedAt"`
 	DeployedAt        string          `json:"deployedAt"`
 	DeployedVersion   string          `json:"deployedVersion"`
+	RoleVersion       string          `json:"roleVersion"`
 }
 
 type ProjectInput struct {
@@ -289,6 +290,7 @@ type ProcessInput struct {
 	IsTenantWide         bool                    `json:"isTenantWide,omitempty"`
 	AllowMultipleSources bool                    `json:"allowMultipleSources,omitempty"`
 	UsesSampleSheet      bool                    `json:"usesSampleSheet,omitempty"`
+	RequiresInternet     bool                    `json:"requiresInternet,omitempty"`
 	PipelineCode         *PipelineCode           `json:"pipelineCode,omitempty"`
 	CustomSettings       *CustomPipelineSettings `json:"customSettings,omitempty"`
 	Maintainers          []string                `json:"maintainers,omitempty"`
@@ -315,6 +317,7 @@ type ProcessDetail struct {
 	IsTenantWide         bool                    `json:"isTenantWide"`
 	AllowMultipleSources bool                    `json:"allowMultipleSources"`
 	UsesSampleSheet      bool                    `json:"usesSampleSheet"`
+	RequiresInternet     bool                    `json:"requiresInternet"`
 	IsArchived           bool                    `json:"isArchived"`
 	PipelineCode         *PipelineCode           `json:"pipelineCode"`
 	CustomSettings       *CustomPipelineSettings `json:"customSettings"`

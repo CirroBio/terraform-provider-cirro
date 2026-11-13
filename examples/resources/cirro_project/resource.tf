@@ -14,6 +14,12 @@ resource "cirro_project" "hosted" {
     }
   ]
 
+  # --- Cloud account (required) ---
+  # HOSTED has Cirro provision the account.
+  account = {
+    account_type = "HOSTED"
+  }
+
   settings = {
     # --- Budget (required) ---
     # Spend limit for the period. Must be > 0.
@@ -44,7 +50,7 @@ resource "cirro_project" "hosted" {
     enable_advanced_gpu_config    = false
 
     # --- Access controls (optional) ---
-    enable_custom_workspace_roles = true
+    enable_custom_workspace_roles = false
     is_discoverable               = false
     is_shareable                  = false
     is_ai_enabled                 = false
@@ -75,7 +81,8 @@ resource "cirro_project" "byoa" {
     }
   ]
 
-  # --- Cloud account (required for BYOA) ---
+  # --- Cloud account (required) ---
+  # account_id is required for BYOA.
   # account_type and account_id cannot be changed after creation.
   account = {
     account_type = "BYOA"

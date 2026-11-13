@@ -29,6 +29,12 @@ resource "cirro_project" "hosted" {
     }
   ]
 
+  # --- Cloud account (required) ---
+  # HOSTED has Cirro provision the account.
+  account = {
+    account_type = "HOSTED"
+  }
+
   settings = {
     # --- Budget (required) ---
     # Spend limit for the period. Must be > 0.
@@ -59,7 +65,7 @@ resource "cirro_project" "hosted" {
     enable_advanced_gpu_config    = false
 
     # --- Access controls (optional) ---
-    enable_custom_workspace_roles = true
+    enable_custom_workspace_roles = false
     is_discoverable               = false
     is_shareable                  = false
     is_ai_enabled                 = false
@@ -90,7 +96,8 @@ resource "cirro_project" "byoa" {
     }
   ]
 
-  # --- Cloud account (required for BYOA) ---
+  # --- Cloud account (required) ---
+  # account_id is required for BYOA.
   # account_type and account_id cannot be changed after creation.
   account = {
     account_type = "BYOA"
@@ -152,6 +159,7 @@ resource "cirro_project" "byoa" {
 
 ### Required
 
+- `account` (Attributes) Cloud account configuration. account_type must be set; BYOA also requires account_id, while HOSTED has Cirro provision the account. Attributes left unset are populated by Cirro. account_type and account_id cannot be changed after creation — modifying them requires replacing the project. (see [below for nested schema](#nestedatt--account))
 - `billing_account_id` (String) Billing account identifier.
 - `contacts` (Attributes List) Project contacts (1-10). Each contact must have name, organization, email, and phone. (see [below for nested schema](#nestedatt--contacts))
 - `description` (String) Project description.
@@ -160,7 +168,6 @@ resource "cirro_project" "byoa" {
 
 ### Optional
 
-- `account` (Attributes) Cloud account configuration (required for BYOA projects). account_type and account_id cannot be changed after creation — modifying them requires replacing the project. (see [below for nested schema](#nestedatt--account))
 - `classification_ids` (List of String) Data classification identifiers.
 - `tags` (List of String) Project tags.
 
@@ -172,9 +179,24 @@ resource "cirro_project" "byoa" {
 - `deployed_version` (String) Version of the project infrastructure that was last deployed.
 - `id` (String) Project identifier.
 - `organization` (String) Organization the project belongs to.
+- `role_version` (String) Version of the Cirro deployment role installed in the project's cloud account.
 - `status` (String) Project status.
 - `status_message` (String) Additional status detail.
 - `updated_at` (String) Timestamp the project was last updated (ISO 8601).
+
+<a id="nestedatt--account"></a>
+### Nested Schema for `account`
+
+Required:
+
+- `account_type` (String) BYOA or HOSTED. Cannot be changed after project creation.
+
+Optional:
+
+- `account_id` (String) AWS account ID (12-digit). Required for BYOA projects; assigned by Cirro for hosted projects when unset. Cannot be changed after project creation.
+- `account_name` (String) Name used to describe the account (BYOA projects).
+- `region_name` (String) AWS region code. Defaults to the region of the Cirro deployment.
+
 
 <a id="nestedatt--contacts"></a>
 ### Nested Schema for `contacts`
@@ -201,13 +223,13 @@ Optional:
 - `dragen_ami` (String) AMI used for DRAGEN instances.
 - `enable_advanced_gpu_config` (Boolean) Whether advanced GPU configuration is enabled.
 - `enable_backup` (Boolean) Enable backup for the project.
-- `enable_custom_workspace_roles` (Boolean) Whether custom workspace roles are enabled.
+- `enable_custom_workspace_roles` (Boolean) Whether custom workspace roles are enabled (BYOA projects only).
 - `enable_dragen` (Boolean) Whether DRAGEN acceleration is enabled.
 - `enable_sftp` (Boolean) Enable SFTP access for the project.
 - `is_ai_enabled` (Boolean) Whether AI features are enabled.
 - `is_discoverable` (Boolean) Whether the project is discoverable by other users.
 - `is_shareable` (Boolean) Whether datasets in the project can be shared.
-- `kms_arn` (String) AWS KMS key ARN for encryption.
+- `kms_arn` (String) AWS KMS key ARN for encryption. Cannot be changed after project creation.
 - `max_fpga_vcpu` (Number) Maximum FPGA vCPU quota.
 - `max_gpu_vcpu` (Number) Maximum GPU vCPU quota.
 - `max_shared_filesystems` (Number) Maximum number of shared filesystems.
@@ -227,17 +249,3 @@ Read-Only:
 - `has_shared_filesystems_enabled` (Boolean) Whether shared filesystems are enabled.
 - `has_workspaces_enabled` (Boolean) Whether interactive workspaces are enabled.
 - `is_omics_available` (Boolean) Whether the project is deployed with the resources needed for AWS HealthOmics runs.
-
-
-<a id="nestedatt--account"></a>
-### Nested Schema for `account`
-
-Required:
-
-- `account_type` (String) HOSTED or BYOA. Cannot be changed after project creation.
-
-Optional:
-
-- `account_id` (String) AWS account ID (12-digit). Cannot be changed after project creation.
-- `account_name` (String)
-- `region_name` (String)

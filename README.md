@@ -14,7 +14,7 @@ terraform {
   required_providers {
     cirro = {
       source  = "cirro-bio/cirro"
-      version = "~> 0.1"
+      version = "~> 0.3"
     }
   }
 }
@@ -73,11 +73,11 @@ Manages a Cirro project. Projects are the top-level container for datasets, anal
 | `billing_account_id` | string | yes | ID of the billing account to charge |
 | `contacts` | list(object) | yes | 1–10 contacts with `name`, `organization`, `email`, `phone` |
 | `settings` | object | yes | See settings sub-arguments below |
-| `account` | object | no | Cloud account config (required for BYOA projects) |
+| `account` | object | yes | Cloud account config; `account_type` must be set |
 | `classification_ids` | list(string) | no | Governance classification IDs to attach |
 | `tags` | list(string) | no | Free-text labels shown in the Cirro UI |
 
-Computed attributes: `id`, `status`, `status_message`, `organization`, `created_by`, `created_at`, `updated_at`, `deployed_at`.
+Computed attributes: `id`, `status`, `status_message`, `organization`, `created_by`, `created_at`, `updated_at`, `deployed_at`, `deployed_version`, `role_version`.
 
 **`settings` sub-arguments**
 
@@ -89,25 +89,25 @@ Computed attributes: `id`, `status`, `status_message`, `organization`, `created_
 | `temporary_storage_lifetime_days` | number | `14` | Days before temporary storage is cleared |
 | `enable_backup` | bool | `false` | Enable automated S3 backup |
 | `enable_sftp` | bool | `false` | Enable SFTP access to project storage |
-| `service_connections` | list(string) | — | Service connection IDs to attach |
-| `kms_arn` | string | — | Customer-managed KMS key ARN for encryption |
+| `service_connections` | list(string) | `[]` | Service connection IDs to attach |
+| `kms_arn` | string | — | Customer-managed KMS key ARN for encryption — **cannot be changed after creation** |
 | `vpc_id` | string | — | VPC ID for BYOA projects (format: `vpc-*`) |
-| `batch_subnets` | list(string) | — | Subnet IDs for batch compute (BYOA) |
-| `workspace_subnets` | list(string) | — | Subnet IDs for workspaces (BYOA) |
-| `max_spot_vcpu` | number | — | Maximum spot vCPU quota |
-| `max_fpga_vcpu` | number | — | Maximum FPGA vCPU quota |
-| `max_gpu_vcpu` | number | — | Maximum GPU vCPU quota |
-| `enable_dragen` | bool | — | Enable DRAGEN compute environment |
+| `batch_subnets` | list(string) | `[]` | Subnet IDs for batch compute (BYOA) |
+| `workspace_subnets` | list(string) | `[]` | Subnet IDs for workspaces (BYOA) |
+| `max_spot_vcpu` | number | `0` | Maximum spot vCPU quota |
+| `max_fpga_vcpu` | number | `0` | Maximum FPGA vCPU quota |
+| `max_gpu_vcpu` | number | `0` | Maximum GPU vCPU quota |
+| `enable_dragen` | bool | `false` | Enable DRAGEN compute environment |
 | `dragen_ami` | string | — | AMI for DRAGEN instances |
-| `max_workspaces_vcpu` | number | — | Maximum vCPU quota for workspaces |
-| `max_workspaces_gpu_vcpu` | number | — | Maximum GPU vCPU quota for workspaces |
-| `max_workspaces_per_user` | number | — | Maximum concurrent workspaces per user |
-| `enable_advanced_gpu_config` | bool | — | Enable advanced GPU configuration |
-| `enable_custom_workspace_roles` | bool | — | Enable custom workspace roles |
-| `max_shared_filesystems` | number | — | Maximum number of shared filesystems |
-| `is_discoverable` | bool | — | Allow other users to discover the project |
-| `is_shareable` | bool | — | Allow datasets to be shared outside the project |
-| `is_ai_enabled` | bool | — | Enable AI features |
+| `max_workspaces_vcpu` | number | `0` | Maximum vCPU quota for workspaces |
+| `max_workspaces_gpu_vcpu` | number | `0` | Maximum GPU vCPU quota for workspaces |
+| `max_workspaces_per_user` | number | `0` | Maximum concurrent workspaces per user |
+| `enable_advanced_gpu_config` | bool | `false` | Enable advanced GPU configuration |
+| `enable_custom_workspace_roles` | bool | `false` | Enable custom workspace roles (BYOA only) |
+| `max_shared_filesystems` | number | `0` | Maximum number of shared filesystems |
+| `is_discoverable` | bool | `false` | Allow other users to discover the project |
+| `is_shareable` | bool | `false` | Allow datasets to be shared outside the project |
+| `is_ai_enabled` | bool | `false` | Enable AI features |
 
 Computed settings: `has_pipelines_enabled`, `has_workspaces_enabled`, `has_shared_filesystems_enabled`.
 
@@ -115,10 +115,12 @@ Computed settings: `has_pipelines_enabled`, `has_workspaces_enabled`, `has_share
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `account_type` | string | yes | `HOSTED` or `BYOA` — **cannot be changed after creation** |
-| `account_id` | string | no | AWS account ID (12-digit) — **cannot be changed after creation** |
-| `account_name` | string | no | Human-readable account name |
-| `region_name` | string | no | AWS region (e.g. `us-east-1`) |
+| `account_type` | string | yes | `BYOA` or `HOSTED` — **cannot be changed after creation** |
+| `account_id` | string | no | AWS account ID (12-digit); required for BYOA, assigned by Cirro for hosted projects when unset — **cannot be changed after creation** |
+| `account_name` | string | no | Human-readable account name (BYOA) |
+| `region_name` | string | no | AWS region (e.g. `us-east-1`); defaults to the region of the Cirro deployment |
+
+Unset `account` attributes are read back from Cirro and kept in state.
 
 Import: `terraform import cirro_project.example {project_id}`
 
@@ -228,6 +230,7 @@ Manages a custom Cirro process (pipeline or ingest data type). Processes define 
 | `is_tenant_wide` | bool | no | Share across the entire tenant (default: `false`) |
 | `allow_multiple_sources` | bool | no | Accept multiple dataset sources (default: `false`) |
 | `uses_sample_sheet` | bool | no | Use the Cirro-provided sample sheet (default: `false`) |
+| `requires_internet` | bool | no | Pipeline requires Internet access; only applicable to AWS HealthOmics (default: `false`) |
 
 **`pipeline_code` sub-arguments**
 

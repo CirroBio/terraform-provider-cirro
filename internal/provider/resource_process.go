@@ -48,6 +48,7 @@ type ProcessResourceModel struct {
 	IsTenantWide         types.Bool   `tfsdk:"is_tenant_wide"`
 	AllowMultipleSources types.Bool   `tfsdk:"allow_multiple_sources"`
 	UsesSampleSheet      types.Bool   `tfsdk:"uses_sample_sheet"`
+	RequiresInternet     types.Bool   `tfsdk:"requires_internet"`
 	PipelineCode         types.Object `tfsdk:"pipeline_code"`
 	CustomSettings       types.Object `tfsdk:"custom_settings"`
 	Maintainers          types.List   `tfsdk:"maintainers"`
@@ -214,6 +215,12 @@ func (r *ProcessResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Computed:    true,
 				Default:     booldefault.StaticBool(false),
 				Description: "Whether the process uses the Cirro-provided sample sheet.",
+			},
+			"requires_internet": schema.BoolAttribute{
+				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
+				Description: "Whether the pipeline requires Internet access to function (only applicable to AWS HealthOmics).",
 			},
 			"pipeline_code": schema.SingleNestedAttribute{
 				Optional:    true,
@@ -545,6 +552,7 @@ func planToProcessInput(ctx context.Context, m ProcessResourceModel) (cirroclien
 		IsTenantWide:         m.IsTenantWide.ValueBool(),
 		AllowMultipleSources: m.AllowMultipleSources.ValueBool(),
 		UsesSampleSheet:      m.UsesSampleSheet.ValueBool(),
+		RequiresInternet:     m.RequiresInternet.ValueBool(),
 	}
 
 	if !m.PipelineCode.IsNull() && !m.PipelineCode.IsUnknown() {
@@ -609,6 +617,7 @@ func processDetailToState(ctx context.Context, p *cirroclient.ProcessDetail, m *
 	m.IsTenantWide = types.BoolValue(p.IsTenantWide)
 	m.AllowMultipleSources = types.BoolValue(p.AllowMultipleSources)
 	m.UsesSampleSheet = types.BoolValue(p.UsesSampleSheet)
+	m.RequiresInternet = types.BoolValue(p.RequiresInternet)
 	m.Owner = types.StringValue(p.Owner)
 	m.IsArchived = types.BoolValue(p.IsArchived)
 	m.CreatedAt = types.StringValue(p.CreatedAt)
